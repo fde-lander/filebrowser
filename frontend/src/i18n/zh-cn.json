@@ -225,6 +225,9 @@
     "unarchiveMessage": "选择提取存档的位置。",
     "unarchiveDestination": "摘录至",
     "unarchiveSuccess": "档案提取成功！",
+    "extractToFolder": "解压到新文件夹",
+    "extractToFolderDestination": "解压到：",
+    "extractToFolderSuccess": "压缩包已解压到新文件夹！",
     "downloadFailed": "分块下载失败 - 如果重复出现这种情况，请尝试减小分块大小：{message}",
     "confirmPasswordToSaveUser": "输入您当前的密码以保存这些用户更改。"
   },

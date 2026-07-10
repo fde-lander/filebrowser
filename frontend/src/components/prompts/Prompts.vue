@@ -108,6 +108,7 @@ import ShareInfo from "./ShareInfo.vue";
 import FileList from "./FileListing.vue";
 import Archive from "./Archive.vue";
 import Unarchive from "./Unarchive.vue";
+import ExtractToFolder from "./ExtractToFolder.vue";
 import OfficeDebug from "./OfficeDebug.vue";
 import ThreeJSControls from "./ThreeJSControls.vue";
 import { state, getters, mutations } from "@/store";
@@ -148,6 +149,7 @@ export default {
     FileList,
     Archive,
     Unarchive,
+    ExtractToFolder,
     OfficeDebug,
     ThreeJSControls,
   },
@@ -353,6 +355,8 @@ export default {
           return this.$t("prompts.archive");
         case "unarchive":
           return this.$t("prompts.unarchive");
+        case "extractToFolder":
+          return this.$t("prompts.extractToFolder");
         case "threejscontrols":
           return this.$t("threejs.controls");
         default:

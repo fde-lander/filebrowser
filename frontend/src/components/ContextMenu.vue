@@ -89,6 +89,12 @@
         @action="showUnarchivePrompt"
       />
       <action
+        v-if="showExtractToFolder"
+        icon="folder_open"
+        :label="$t('prompts.extractToFolder')"
+        @action="showExtractToFolderPrompt"
+      />
+      <action
         v-if="showShareAction"
         icon="share"
         :label="$t('general.share')"
@@ -186,6 +192,7 @@
       <action v-if="showWatch" icon="visibility" :label="$t('buttons.watchFile')" @action="watchFile()" />
       <action v-if="hasDownload" icon="file_download" :label="$t('general.download')" @action="startDownload" />
       <action v-if="showUnarchiveInOverflow" icon="folder_open" :label="$t('prompts.unarchive')" @action="showUnarchivePromptFromPreview" />
+      <action v-if="showExtractToFolderInOverflow" icon="create_new_folder" :label="$t('prompts.extractToFolder')" @action="showExtractToFolderPromptFromPreview" />
       <action v-if="showEdit" icon="edit" :label="$t('general.edit')" @action="edit()" />
       <action v-if="markdownPreview" icon="visibility" :label="$t('general.preview')" @action="switchToMarkdown" />
       <action v-if="showSave" icon="save" :label="$t('general.save')" @action="save()" />
@@ -324,6 +331,14 @@ export default {
       const item = this.firstSelected;
       return item && isArchivePath(item.path || item.from || item.name);
     },
+    showExtractToFolder() {
+      if (this.showLimitedOptions || getters.isShare()) return false;
+      if (!this.permissions.create) return false;
+      if (this.showCreate) return false;
+      if (this.selectedCount !== 1) return false;
+      const item = this.firstSelected;
+      return item && isArchivePath(item.path || item.from || item.name);
+    },
     showShareAction() {
       if (this.showLimitedOptions) return false;
       return this.selectedCount <= 1 && this.showShare;
@@ -390,9 +405,14 @@ export default {
       return false
     },
     hasOverflowItems() {
-      return this.showEdit || this.showDelete || this.showSave || this.showGoToRaw || this.hasDownload || this.showUnarchiveInOverflow;
+      return this.showEdit || this.showDelete || this.showSave || this.showGoToRaw || this.hasDownload || this.showUnarchiveInOverflow || this.showExtractToFolderInOverflow;
     },
     showUnarchiveInOverflow() {
+      if (!this.permissions.create || getters.isShare()) return false;
+      const req = state.req;
+      return req && !req.isDir && isArchivePath(req.path || req.name);
+    },
+    showExtractToFolderInOverflow() {
       if (!this.permissions.create || getters.isShare()) return false;
       const req = state.req;
       return req && !req.isDir && isArchivePath(req.path || req.name);
@@ -807,6 +827,27 @@ export default {
       const source = item.source || state.req.source;
       mutations.showPrompt({
         name: "unarchive",
+        props: {
+          item: { path, source, name: item.name },
+        },
+      });
+    },
+    showExtractToFolderPrompt() {
+      const item = this.firstSelected;
+      if (!item) return;
+      this.openExtractToFolderPrompt(item);
+    },
+    showExtractToFolderPromptFromPreview() {
+      mutations.closeTopPrompt();
+      const req = state.req;
+      if (!req) return;
+      this.openExtractToFolderPrompt({ path: req.path, source: req.source, name: req.name });
+    },
+    openExtractToFolderPrompt(item) {
+      const path = item.path || item.from;
+      const source = item.source || state.req.source;
+      mutations.showPrompt({
+        name: "extractToFolder",
         props: {
           item: { path, source, name: item.name },
         },

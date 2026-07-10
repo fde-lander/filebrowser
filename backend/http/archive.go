@@ -372,10 +372,11 @@ func archiveCreateHandler(w http.ResponseWriter, r *http.Request, d *requestCont
 // @Description - **path** (string, required): Path to the archive file (on fromSource). Must be .zip, .tar.gz, or .tgz. Example: `"/downloads/data.zip"`
 // @Description - **destination** (string, required): Directory path (on toSource) to extract into. Example: `"/projects/imported"`
 // @Description - **deleteAfter** (boolean, optional): If true, delete the archive file after successful extraction. Default: false. Example: `true`
+// @Description - **createSubfolder** (boolean, optional): If true, automatically creates a subfolder named after the archive (with auto-suffix on conflict) and extracts into it. Default: false. Example: `true`
 // @Tags Resources
 // @Accept json
 // @Produce json
-// @Param body body unarchiveRequest true "Request body: fromSource, toSource (optional), path, destination, deleteAfter (optional)"
+// @Param body body unarchiveRequest true "Request body: fromSource, toSource (optional), path, destination, deleteAfter (optional), createSubfolder (optional)"
 // @Success 200 {object} map[string]string "Extracted; returns {\"path\": \"<destination path>\", \"source\": \"<toSource>\"}"
 // @Failure 400 {object} map[string]string "Invalid request (e.g. missing required field, unsupported format)"
 // @Failure 403 {object} map[string]string "Forbidden (create permission or access denied)"
@@ -456,6 +457,21 @@ func unarchiveHandler(w http.ResponseWriter, r *http.Request, d *requestContext)
 	}
 	if !destInfo.IsDir() {
 		return http.StatusBadRequest, fmt.Errorf("destination must be a directory: %s", req.Destination)
+	}
+
+	// If createSubfolder is requested, auto-create a subfolder named after the archive
+	if req.CreateSubfolder {
+		folderName := archiveFolderName(req.Path)
+		resolvedName, err := resolveUniqueSubfolderName(destReal, folderName)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("failed to create subfolder: %v", err)
+		}
+		destReal = filepath.Join(destReal, resolvedName)
+		if err := os.MkdirAll(destReal, fileutils.EffectiveDirPerm()); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("failed to create subfolder: %v", err)
+		}
+		req.Destination = path.Join(req.Destination, resolvedName)
+		logger.Debugf("createSubfolder: created %s, extracting into %s", resolvedName, destReal)
 	}
 
 	info, err := os.Stat(archiveReal)
@@ -901,6 +917,44 @@ type unarchiveRequest struct {
 	Destination string `json:"destination"`
 	// If true, delete the archive file after successful extraction (optional; default: false). Example: true
 	DeleteAfter bool `json:"deleteAfter"`
+	// If true, auto-create a subfolder named after the archive and extract into it (optional; default: false). Example: true
+	CreateSubfolder bool `json:"createSubfolder"`
+}
+
+// archiveFolderName extracts a folder name from an archive path.
+// Strips .zip, .tar.gz, .tgz extensions (case-insensitive).
+// If the result is empty, returns "extracted" as fallback.
+func archiveFolderName(archivePath string) string {
+	name := path.Base(archivePath)
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, ".tar.gz") {
+		return name[:len(name)-7]
+	}
+	if strings.HasSuffix(lower, ".tgz") {
+		return name[:len(name)-4]
+	}
+	if strings.HasSuffix(lower, ".zip") {
+		return name[:len(name)-4]
+	}
+	if name == "" || name == "." || name == "/" {
+		return "extracted"
+	}
+	return name
+}
+
+// resolveUniqueSubfolderName finds a non-conflicting folder name in destDir.
+// Tries: "name", "name (1)", "name (2)", ..., "name (99)".
+// Returns error if all 100 attempts collide.
+func resolveUniqueSubfolderName(destDir, baseName string) (string, error) {
+	candidate := baseName
+	for i := 0; i <= 99; i++ {
+		fullPath := filepath.Join(destDir, candidate)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s (%d)", baseName, i+1)
+	}
+	return "", fmt.Errorf("could not find available folder name after 100 attempts")
 }
 
 // normalizeArchiveEntryName turns a raw zip/tar name into a safe relative path (slash-separated).

@@ -890,7 +890,7 @@ export async function createArchive(opts) {
 
 // POST /api/resources/unarchive - Extract an archive
 export async function unarchive(opts) {
-  const { fromSource, toSource, path, destination, deleteAfter } = opts;
+  const { fromSource, toSource, path, destination, deleteAfter, createSubfolder } = opts;
   if (!fromSource || !path || !destination) {
     throw new Error("fromSource, path, and destination are required");
   }
@@ -900,6 +900,7 @@ export async function unarchive(opts) {
     path,
     destination,
     ...(deleteAfter && { deleteAfter: true }),
+    ...(createSubfolder && { createSubfolder: true }),
   };
   try {
     const apiPath = getApiPath("resources/unarchive");

@@ -51,7 +51,7 @@ export async function createArchive(opts) {
  * @param {boolean} [opts.deleteAfter] - Delete archive after successful extract
  */
 export async function unarchive(opts) {
-  const { fromSource, toSource, path, destination, deleteAfter } = opts;
+  const { fromSource, toSource, path, destination, deleteAfter, createSubfolder } = opts;
   if (!fromSource || !path || !destination) {
     throw new Error("fromSource, path, and destination are required");
   }
@@ -61,6 +61,7 @@ export async function unarchive(opts) {
     path,
     destination,
     ...(deleteAfter && { deleteAfter: true }),
+    ...(createSubfolder && { createSubfolder: true }),
   };
   try {
     const apiPath = getApiPath("resources/unarchive");

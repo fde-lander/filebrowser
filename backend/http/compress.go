@@ -176,6 +176,11 @@ func detectFormat(path string) string {
 	}
 }
 
+func isImageFile(path string) bool {
+	f := detectFormat(path)
+	return f != "unknown" && f != "gif" && f != "tiff"
+}
+
 func shouldResize(level string, width int) (int, bool) {
 	switch level {
 	case "medium":
@@ -373,6 +378,9 @@ func resizeImage(src image.Image, newWidth int) image.Image {
 // @Param body body compressPreviewRequest true "Preview request"
 // @Router /api/compress-images/preview [post]
 func compressPreviewHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required for image compression")
+	}
 	var req compressPreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("invalid request body: %v", err)
@@ -450,6 +458,26 @@ func createBackup(filePaths []string, outputPath string) error {
 }
 
 func addFileToTar(tw *tar.Writer, filePath string) error {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return err
+	}
+
+	if info.IsDir() {
+		return filepath.Walk(filePath, func(walkPath string, walkInfo os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if walkInfo.IsDir() {
+				return nil
+			}
+			return addSingleFileToTar(tw, walkPath)
+		})
+	}
+	return addSingleFileToTar(tw, filePath)
+}
+
+func addSingleFileToTar(tw *tar.Writer, filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -485,6 +513,9 @@ func addFileToTar(tw *tar.Writer, filePath string) error {
 // @Param body body compressRequest true "Compress request"
 // @Router /api/compress-images [post]
 func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required for image compression")
+	}
 	var req compressRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("invalid request body: %v", err)
@@ -502,7 +533,24 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 			logger.Errorf("compress: failed to resolve path %s: %v", userPath, err)
 			continue
 		}
-		realPaths = append(realPaths, realPath)
+		info, err := os.Stat(realPath)
+		if err != nil {
+			logger.Errorf("compress: stat failed for %s: %v", realPath, err)
+			continue
+		}
+		if info.IsDir() {
+			filepath.Walk(realPath, func(walkPath string, walkInfo os.FileInfo, err error) error {
+				if err != nil || walkInfo.IsDir() {
+					return nil
+				}
+				if isImageFile(walkPath) {
+					realPaths = append(realPaths, walkPath)
+				}
+				return nil
+			})
+		} else {
+			realPaths = append(realPaths, realPath)
+		}
 	}
 
 	if len(realPaths) == 0 {
@@ -606,6 +654,9 @@ func getCompressedPath(origPath string, format string) string {
 // @Param taskId query string true "Task ID"
 // @Router /api/compress-images/progress [get]
 func compressProgressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required for image compression")
+	}
 	taskID := r.URL.Query().Get("taskId")
 	if taskID == "" {
 		return http.StatusBadRequest, fmt.Errorf("missing taskId")

@@ -388,8 +388,8 @@ func unarchiveHandler(w http.ResponseWriter, r *http.Request, d *requestContext)
 	if d.share != nil {
 		return http.StatusForbidden, fmt.Errorf("unarchive not allowed for shares")
 	}
-	if !d.user.Permissions.Create {
-		return http.StatusForbidden, fmt.Errorf("user is not allowed to create resources")
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required for extract operations")
 	}
 
 	var req unarchiveRequest

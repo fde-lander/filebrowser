@@ -141,6 +141,13 @@ func StartHttp(ctx context.Context, storage *bolt.BoltStore, shutdownComplete ch
 	publicApi.HandleFunc("GET /resources/download", withHashFile(publicDownloadHandler))
 	publicApi.HandleFunc("GET /resources/preview", withTimeout(30*time.Second, withHashFileHelper(publicPreviewHandler)))
 	publicApi.HandleFunc("POST /resources/pause", withHashFile(publicPauseHandler))
+	// ========================================
+	// Compress Routes - /api/compress-images/
+	// ========================================
+	api.HandleFunc("POST /compress-images/preview", withUser(compressPreviewHandler))
+	api.HandleFunc("POST /compress-images", withUser(compressHandler))
+	api.HandleFunc("GET /compress-images/progress", withUser(compressProgressHandler))
+
 	// Legacy routes (backwards compatibility)
 	api.HandleFunc("GET /raw", withUser(downloadHandler))
 	publicApi.HandleFunc("GET /raw", withHashFile(publicDownloadHandler))

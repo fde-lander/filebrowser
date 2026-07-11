@@ -148,7 +148,8 @@
     "goToItem": "Go to item",
     "goToSource": "Go to Source Location",
     "pinItem": "Pin",
-    "unpinItem": "Unpin"
+    "unpinItem": "Unpin",
+    "compressImages": "Compress Images"
   },
   "errors": {
     "forbidden": "You don't have permissions to access this.",
@@ -418,7 +419,27 @@
     "moveFailed": "Move failed",
     "operationFailed": "Operation failed",
     "partialSuccess": "Some operations failed: {succeeded} succeeded, {failed} failed",
-    "confirmPasswordToSaveUser": "Enter your current password to save these user changes."
+    "confirmPasswordToSaveUser": "Enter your current password to save these user changes.",
+    "compressImages": "Compress Images",
+    "compressImagesDescription": "Compress selected image files to reduce file size.",
+    "compressTierLow": "Low Compression",
+    "compressTierMedium": "Medium Compression",
+    "compressTierHigh": "High Compression",
+    "compressQuality": "Compression Quality",
+    "compressQualityLevel": "Quality Level",
+    "compressAdvanced": "Advanced Settings",
+    "compressPreview": "Preview",
+    "compressOriginal": "Original",
+    "compressCompressed": "Compressed",
+    "compressBackup": "Create ZSTD backup of originals",
+    "compressBackupDescription": "Save original files as .zst compressed backups before replacing with compressed versions.",
+    "compressBackupName": "Backup filename",
+    "compressConfirm": "Compress {count} image(s)?",
+    "compressProgress": "Compressing {current}/{total}...",
+    "compressComplete": "Compressed {count} image(s), saved {saved}!",
+    "compressFailed": "Compression failed",
+    "compressNoFiles": "No image files selected",
+    "compressSelectFiles": "Select at least one image to compress"
   },
   "search": {
     "searchContext": "Search Context: {context}",
@@ -556,7 +577,21 @@
     "shareDeleted": "Share deleted!",
     "userDeleted": "User deleted!",
     "userManagement": "User Management",
-    "userUpdated": "User updated!"
+    "userUpdated": "User updated!",
+    "imageViewerSection": "Image Viewer",
+    "imagePreload": "Preload images",
+    "imagePreloadDescription": "Preload adjacent images for faster navigation when browsing through images.",
+    "imageTransition": "Image transition effect",
+    "imageTransitionDescription": "Animation type when switching between images.",
+    "imageTransitionNone": "None",
+    "imageTransitionFade": "Fade",
+    "imageTransitionSlide": "Slide",
+    "imageTapNav": "Tap to navigate images",
+    "imageTapNavDescription": "On touch devices, tap left/right half of the screen to navigate between images.",
+    "persistentNavButtons": "Persistent navigation buttons",
+    "persistentNavButtonsDescription": "Always show prev/next navigation buttons instead of auto-hiding them.",
+    "navButtonOpacity": "Navigation button opacity",
+    "navButtonOpacityDescription": "Set the opacity of the prev/next navigation buttons (0.0 to 1.0)."
   },
   "sidebar": {
     "dividerNamePlaceholder": "Divider text (leave blank to show a line)",

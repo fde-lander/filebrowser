@@ -44,6 +44,40 @@
   - Docker save: filebrowser-fde-v1.4.0.3.tar (84MB)
   - 6 commits total on v1.4.0.2-image-viewer-compression branch
 
+### v1.4.0.3 Test Results (2026-07-12, tested by MASTER)
+
+**Bug A (Image Transition) - PARTIALLY FIXED ⚠️**
+- crossfade mode: SMOOTH, natural for normal-paced navigation ✅
+- After 5-6 rapid page turns: brief black flash in ALL modes ⚠️
+- crossfade masks the gap well (transition duration hides it)
+- instant mode: gap MOST visible - black flash then image appears
+- User desired: instant mode should NEVER show black - old image stays until new ready
+- Root cause: swapBuffers instant path hides fromRef before toRef decoded
+
+**Bug B (Compress API 404) - FIXED ✅**
+- No 404 errors on any API call
+- Preview API returns 200 (3.6s - noted for UX improvement)
+
+**Bug C (Folder Right-Click) - FIXED ✅**
+- Folder/file/multi-select all show compress option
+
+**Bug D (Backup Feature) - NOT FIXED ❌**
+- 3 critical issues remain (see handoff document)
+
+**Permission Gate - WORKING ✅**
+- Admin/non-admin/share users all behave correctly
+
+### Critical Issues for Next Hotfix (v1.4.0.4)
+
+1. Folder compression 500: compressPreviewHandler lacks directory expansion
+2. Backup file creation fails: backupPath not resolved through source mapping
+3. Compression stuck at 0/N: caused by backup failure (backup-first design)
+4. Preview not rendering: API returns 200 but no visible preview
+5. Instant transition black flash: swapBuffers hides fromRef too early
+
+**Handoff document: /tmp/handoff-r6jEEE.md**
+**LanceDB memory: ID d96afe8c (previous bug status)**
+
 ### Brainstorming & Design Spec (Session 2)
 - Brainstorming skill loaded, 4 subagents dispatched for parallel code analysis
 - All 4 subagent results analyzed and recorded in findings.md

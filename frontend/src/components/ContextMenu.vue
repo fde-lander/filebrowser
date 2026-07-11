@@ -332,12 +332,12 @@ export default {
     },
     showCompressImages() {
       if (this.showLimitedOptions || getters.isShare()) return false;
-      if (!this.permissions.create) return false;
+      if (!this.permissions.admin) return false;
       if (this.showCreate) return false;
       if (this.selectedCount === 0) return false;
       // Show if any selected item is an image or a directory
       return this.providedItems.some(item =>
-        item.isDir || isImageFilePath(item.path || item.from || item.name)
+        item.isDir || item.type === 'directory' || isImageFilePath(item.path || item.from || item.name)
       );
     },
     showUnarchive() {
@@ -350,7 +350,7 @@ export default {
     },
     showExtractToFolder() {
       if (this.showLimitedOptions || getters.isShare()) return false;
-      if (!this.permissions.create) return false;
+      if (!this.permissions.admin) return false;
       if (this.showCreate) return false;
       if (this.selectedCount !== 1) return false;
       const item = this.firstSelected;

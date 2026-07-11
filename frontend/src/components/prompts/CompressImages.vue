@@ -272,10 +272,21 @@ export default {
     backupFileName() {
       const firstFile = this.items[0];
       if (!firstFile) return "";
+      const parts = firstFile.path.split("/").filter(Boolean);
+      const firstName = parts[parts.length - 1] || "backup";
+      const count = this.items.length;
+      if (count === 1) {
+        return `${firstName}.tar.zst`;
+      }
+      const others = count - 1;
+      return `${firstName}_and_${others}_other${others > 1 ? 's' : ''}.tar.zst`;
+    },
+    backupPath() {
+      const firstFile = this.items[0];
+      if (!firstFile) return "/";
       const parts = firstFile.path.split("/");
-      const fileName = parts[parts.length - 1];
-      // Naming rule: original.zst (e.g., photo.jpg -> photo.jpg.zst)
-      return `${fileName}.zst`;
+      parts.pop();
+      return parts.join("/") || "/";
     },
     progressPercent() {
       if (!this.progressData.total) return 0;
@@ -324,7 +335,7 @@ export default {
         const result = await previewCompress({
           source: file.source,
           path: file.path,
-          tier: this.selectedTier,
+          level: this.selectedTier,
           quality: this.quality,
         });
         this.previewUrls.original = result.previewUrl || null;
@@ -352,17 +363,19 @@ export default {
       this.progressData.total = files.length;
       this.progressData.current = 0;
       const source = files[0]?.source;
-      const filePaths = files.map((f) => ({ path: f.path }));
+      const filePaths = files.map((f) => f.path);
       try {
         const result = await startCompress({
           source,
           files: filePaths,
-          tier: this.selectedTier,
+          level: this.selectedTier,
           quality: this.quality,
           backup: this.backupEnabled,
+          backupPath: this.backupPath,
+          backupName: this.backupFileName,
         });
         // Subscribe to progress
-        this.progressSubscription = subscribeProgress(result.jobId, {
+        this.progressSubscription = subscribeProgress(result.taskId, {
           onProgress: (data) => {
             this.progressData = data;
           },

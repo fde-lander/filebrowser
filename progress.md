@@ -1,26 +1,98 @@
 # Progress Log (Round 2 - Bug Fix Phase)
 
-## Session: 2026-07-11 (Bug Fix Phase)
+## Session: 2026-07-11 (Bug Fix Phase - Session 2)
 
-### Bug Reports from Master (post-deploy testing)
+### Session 2 Start
+- **Started:** 2026-07-11 (new session, picked up from handoff)
+- **Handoff document:** /tmp/handoff-EmvDWq.md
+- **Brainstorming skill loaded** for systematic design approach
+- **4 subagents dispatched** for parallel code analysis:
+  - Agent 1: Bug A - doTransition race condition (ExtendedImage.vue + Preview.vue)
+  - Agent 2: Bug B - Compress API 404 (httpRouter.go + compress.go + api/compress.js)
+  - Agent 3: Bug C+D - Folder right-click + backup filename (ContextMenu.vue + CompressImages.vue)
+  - Agent 4: Permission system analysis (User struct, route guards, frontend gating)
+- **NEW requirement from user:** Permission gate for extract-to-folder + compress-images
+  - Both features must only be visible/usable by authorized users
+  - Prevent shared users from accidentally triggering compress/extract operations
+- **PWF files updated:** task_plan.md (Phase 2 added), progress.md (Session 2 log)
+- **Status:** Design Spec + Implementation Plan COMPLETED, awaiting user approval to execute
 
-**Bug 1: i18n 设置页英文 + 描述空**
-- Settings -> Profile 页面新增的图片查看器设置显示英文
-- 设置描述为空
-- 原因推测：i18n key 路径不对（可能用了 profileSettings.xxx 而非 settings.xxx）
+### Implementation (Session 2 - Phase 1-4 Complete)
+- Phase 1: Backend (6 tasks) ✅ commit b19e1960
+  - isImageFile() helper, addFileToTar directory recursion
+  - compressHandler directory expansion
+  - Admin checks on all 3 compress handlers + unarchiveHandler
+  - go build + vet + mod verify: ALL PASS
+- Phase 2: Frontend API (2 tasks) ✅ commit f6f12a22
+  - api/compress.js: 8 fixes (URL paths, tier->level, files format, jobId->taskId, backup params)
+  - grep verify: 0 remaining tier/jobId/resources-compress
+- Phase 3: Frontend Components (4 tasks) ✅ commits e90f89a2 + be842d25
+  - CompressImages.vue: backupFileName (.tar.zst), backupPath computed, doCompress (flat files, level, taskId, backup params), updatePreview (level)
+  - ContextMenu.vue: isDir || type === 'directory', permissions.admin
+- Phase 4: Transition Rewrite (9 tasks) ✅ commit ccd433f5
+  - ExtendedImage.vue: Set cache, transitionGeneration, removed bufferA/bufferB data
+  - bufferAStyle/bufferBStyle simplified
+  - onLoad() guard added
+  - doTransition replaced with navigateToImage + swapBuffers + finishTransition closure
+  - preloadAdjacentImages + trimCachePool simplified for Set
+  - src watcher calls navigateToImage
+  - imgB @error added
+  - grep verify: 0 doTransition, 0 imageCachePool.set, 0 this.bufferA/B
+- Phase 5: Build & Deploy ✅ COMPLETE
+  - go build + vet + mod verify: ALL PASS
+  - Docker build v1.4.0.3: SUCCESS (84MB)
+  - Docker save: filebrowser-fde-v1.4.0.3.tar (84MB)
+  - 6 commits total on v1.4.0.2-image-viewer-compression branch
 
-**Bug 2: imagePreload/imageTapNav 默认未开启**
-- Go struct bool 默认值是 false（zero value）
-- 需要在前端读取时做 ?? true 处理，或后端设置默认值
+### Brainstorming & Design Spec (Session 2)
+- Brainstorming skill loaded, 4 subagents dispatched for parallel code analysis
+- All 4 subagent results analyzed and recorded in findings.md
+- 5 clarifying questions discussed with user (Bug A approach, Bug B direction, Bug C/D details, Bug D backup, permission design)
+- Design spec written: 8 chapters, 849 lines
+  - Ch1: Overview & Scope
+  - Ch2: Bug A - Image Transition Redesign (simplified architecture with CSS transitions + generation token)
+  - Ch3: Bug B - Compress API Frontend Alignment (URL/field/format/param fixes)
+  - Ch4: Bug C - Folder Right-Click Detection (dual field check)
+  - Ch5: Bug D - Backup Feature Complete Fix (naming, params, directory recursion, backup-first)
+  - Ch6: Permission Gate (Admin permission for both features)
+  - Ch7: File Change Map & Implementation Order (7 files, 5 phases, 23 steps)
+  - Ch8: Verification Checklist (52 items)
+- Spec self-review: 0 placeholders, 0 contradictions, 0 ambiguities, scope OK
+- Spec location: ~/.hermes/docs/superpowers/specs/2026-07-11-bugfix-permission-design.md
 
-**Bug 3: 图片翻页仍突变无渐变**
-- 即使开了 imagePreload，翻页时仍像刷新新页面
-- doTransition 方法可能没有被调用，或 Preview.vue 改动不完整
+### Previous: Hotfix 1 Results (deployed + tested by MASTER)
 
-**Bug 4: 文件夹右键无压缩菜单 + 文件点击卡死**
-- 右键文件夹没有「压缩图片」选项
-- 右键单个图片文件点击压缩 -> 画面变暗 + 操作条 + 卡死
-- CompressImages.vue 弹窗可能未正确渲染，或 showPrompt 调用有问题
+**Fixed in Hotfix 1 (commit ad5f2774):**
+- Bug 1 ✅: i18n keys moved from settings.* to profileSettings.* + 4 missing keys added
+- Bug 2 ✅: imagePreload/imageTapNav default true in Profile.vue mounted()
+- Bug 3 PARTIAL: src watcher now calls doTransition() instead of loadFullImage() + Preview.vue no isTransitioning for images
+- Bug 4 ✅: items prop passed + mounted() null guard + props default
+
+**Remaining bugs after Hotfix 1 test:**
+
+**Bug A (CRITICAL): Image transition unstable on rapid navigation**
+- Symptom: Fast flipping causes image to disappear, show thumbnail + spinner, then enlarge
+- All 3 modes affected (crossfade, fade_to_black, instant)
+- Cause: doTransition() race conditions, cache pool corruption on rapid nav
+- Files: ExtendedImage.vue doTransition() ~line 452, src watcher ~line 1018
+
+**Bug B (CRITICAL): Compress API returns 404**
+- Symptom: 404 on preview, tier selection, quality slider change
+- Cause: Route registration or URL mismatch
+- Files: httpRouter.go ~line 145, api/compress.js, CompressImages.vue updatePreview()
+
+**Bug C (MEDIUM): Folder right-click missing Compress Images**
+- Symptom: Right-click folder = no compress option
+- Cause: showCompressImages computed may not detect folder selection
+- Files: ContextMenu.vue ~line 333
+
+**Bug D (MINOR): Backup filename wrong**
+- Multi-file missing "etc" suffix
+- Extension should be .tar.zst not .zst
+- Files: CompressImages.vue backupFileName ~line 270, compress.go createBackup()
+
+**Handoff document: /tmp/handoff-EmvDWq.md**
+**LanceDB memory: ID d96afe8c**
 
 ### Phase 1: Design & Brainstorming
 - **Status:** in_progress

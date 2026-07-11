@@ -247,3 +247,99 @@ docker-compose.yaml 中 image 改回 `gtstef/filebrowser:1.4.0-stable`，restart
 - Plan: ~/.hermes/docs/superpowers/plans/2026-07-11-image-viewer-compression-plan.md
 - Deploy: docs/deploy-v1.4.0.2.md
 - PWF: task_plan.md, findings.md, progress.md
+
+---
+
+# v1.4.0.3 - Bug Fix & Permission Enhancement
+
+**Date:** 2026-07-12
+**Author:** fde-lander
+**Base Version:** v1.4.0-stable
+**Branch:** v1.4.0.2-image-viewer-compression
+**Docker Image:** filebrowser-fde:v1.4.0.3 (84MB)
+**Status:** Ready for deployment
+
+---
+
+## 修复内容
+
+### Bug A (CRITICAL): 图片快速翻页时过渡不稳定
+
+**问题：** 快速翻页几次后图片消失，显示缩略图 + 转圈，然后放大。三种过渡模式都受影响。
+
+**根因：** JS 双缓冲状态机有 5 个 race condition：
+1. doTransition() 无重入保护
+2. toImg.complete 浏览器兼容问题
+3. stale onload closure
+4. imgA @load 与 doTransition onload 双重触发
+5. 缓存池存 detached Image 但从未复用
+
+**修复方案：** 架构重写 - 放弃 JS 管理过渡动画，改用 CSS transition + generation token
+- 新方法 navigateToImage() 替代 doTransition()
+- 新方法 swapBuffers() 用 CSS opacity 管理三种过渡模式
+- generation token 防止 stale callback
+- 缓存池简化为 Set<string>
+- onLoad() 加 guard 防止双重触发
+
+### Bug B (CRITICAL): 压缩图片 API 全部 404
+
+**问题：** 预览、选档位、调 quality 都返回 404。
+
+**根因：** 前端 API 路径、字段名、参数格式全部与后端不匹配。
+
+**修复：** 前端 api/compress.js 全面对齐后端：
+- URL 路径：resources/compress/* -> compress-images/*
+- 字段名：tier -> level
+- 文件格式：[{path}] -> ["path1", ...]
+- 进度参数：jobId -> taskId
+
+### Bug C (MEDIUM): 右键文件夹无「压缩图片」选项
+
+**问题：** 右键文件夹不显示压缩菜单。
+
+**根因：** showCompressImages 检查 item.isDir，但部分 item 对象使用 item.type === 'directory'。
+
+**修复：** 双重检测：item.isDir || item.type === 'directory'
+
+### Bug D (HIGH): 备份功能损坏
+
+**问题：** backupFileName 只显示不发送，后端 os.Create("") 失败，扩展名错误，不支持目录递归。
+
+**修复：**
+- backupFileName 改为 .tar.zst 扩展名，多文件加 _and_N_others 后缀
+- 新增 backupPath computed，计算同层目录
+- doCompress 传递 backupPath + backupName 到后端
+- 后端 addFileToTar 支持目录递归（filepath.Walk）
+- 后端 compressHandler 目录展开为图片文件列表
+
+### 新增：Admin 权限门控
+
+**需求：** 解压到新文件夹 + 压缩图片功能必须 Admin 权限才能使用。
+
+**实现：**
+- 后端：compressHandler/compressPreviewHandler/compressProgressHandler 加 Admin 检查
+- 后端：unarchiveHandler 从 Create 改为 Admin
+- 前端：showCompressImages/showExtractToFolder 从 permissions.create 改为 permissions.admin
+
+## 改动文件清单
+
+1. backend/http/compress.go - isImageFile, addFileToTar recursion, dir expansion, Admin checks
+2. backend/http/archive.go - unarchiveHandler Create -> Admin
+3. frontend/src/api/compress.js - URL/field/format/param alignment
+4. frontend/src/components/prompts/CompressImages.vue - backup naming, API params
+5. frontend/src/components/ContextMenu.vue - folder detection, Admin permission
+6. frontend/src/components/files/ExtendedImage.vue - transition architecture rewrite
+
+## Git Commits
+
+- b19e1960 fix: backend directory recursion + Admin permission gate for compress/extract
+- f6f12a22 fix: align frontend compress API with backend routes and fields
+- e90f89a2 fix: backup naming + API field alignment in CompressImages.vue
+- be842d25 fix: folder detection + Admin permission gate for compress/extract
+- ccd433f5 fix: rewrite image transition to CSS-managed architecture with generation token
+
+## 相关文档
+
+- Spec: ~/.hermes/docs/superpowers/specs/2026-07-11-bugfix-permission-design.md
+- Plan: ~/.hermes/docs/superpowers/plans/2026-07-11-bugfix-permission-plan.md
+- PWF: task_plan.md, findings.md, progress.md

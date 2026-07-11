@@ -29,6 +29,7 @@
       v-if="!isTiff"
       class="image-ex-img image-buffer-b"
       ref="imgB"
+      @error="onImageError"
       :style="bufferBStyle"
     />
     <canvas
@@ -151,11 +152,10 @@ export default {
       edgeRubberMax: 100,
       pinchActive: false,
       // Dual-buffer + cache pool
-      imageCachePool: new Map(), // URL -> { img: HTMLImageElement, decoded: boolean, url: string }
+      imageCachePool: new Set(),
       activeBuffer: 'A', // which img element is currently showing ('A' or 'B')
-      bufferA: { loaded: false, url: null },
-      bufferB: { loaded: false, url: null },
       transitionInProgress: false,
+      transitionGeneration: 0,
       tapNavTimeout: null,
       wasDragging: false,
       dragStartX: 0,
@@ -225,20 +225,15 @@ export default {
     },
     // Dual-buffer display styles
     bufferAStyle() {
-      // Hide active buffer while thumbnail is showing and full image hasn't loaded
       const showDuringThumbnail = this.cachedThumbnailUrl && !this.fullImageLoaded;
       return {
         display: (this.activeBuffer === 'A' && !showDuringThumbnail) ? 'block' : 'none',
-        opacity: this.transitionInProgress ? undefined : 1,
-        transition: this.transitionInProgress ? 'opacity 0.3s ease' : 'none',
       };
     },
     bufferBStyle() {
       const showDuringThumbnail = this.cachedThumbnailUrl && !this.fullImageLoaded;
       return {
         display: (this.activeBuffer === 'B' && !showDuringThumbnail) ? 'block' : 'none',
-        opacity: this.transitionInProgress ? undefined : 1,
-        transition: this.transitionInProgress ? 'opacity 0.3s ease' : 'none',
       };
     },
     // Settings with safe defaults (fields may not exist in store yet)
@@ -351,6 +346,7 @@ export default {
       });
     },
     onLoad() {
+      if (this.transitionInProgress) return;
       // Step 3: Real image loaded - hide thumbnail and show image
       this.imageLoaded = true;
       this.fullImageLoaded = true;
@@ -363,15 +359,8 @@ export default {
 
       // Store in cache pool
       if (this.src) {
-        const activeRef = this.isTiff ? this.$refs.imgex : (this.activeBuffer === 'A' ? this.$refs.imgA : this.$refs.imgB);
-        if (activeRef) {
-          this.imageCachePool.set(this.src, {
-            img: activeRef,
-            decoded: true,
-            url: this.src,
-          });
-          this.trimCachePool();
-        }
+        this.imageCachePool.add(this.src);
+        this.trimCachePool();
       }
 
       // Trigger background preload of next/prev images
@@ -409,105 +398,142 @@ export default {
       const nextUrl = state.navigation?.nextRaw;
       const prevUrl = state.navigation?.previousRaw;
 
-      if (nextUrl && !this.imageCachePool.has(nextUrl)) {
-        const img = new Image();
-        img.onload = () => {
-          this.imageCachePool.set(nextUrl, { img, decoded: true, url: nextUrl });
-          this.trimCachePool();
-        };
-        const cleanSrc = String(nextUrl).replace(/&amp;/g, '&');
-        img.src = cleanSrc;
-      }
-
-      if (prevUrl && !this.imageCachePool.has(prevUrl)) {
-        const img = new Image();
-        img.onload = () => {
-          this.imageCachePool.set(prevUrl, { img, decoded: true, url: prevUrl });
-          this.trimCachePool();
-        };
-        const cleanSrc = String(prevUrl).replace(/&amp;/g, '&');
-        img.src = cleanSrc;
+      for (const url of [nextUrl, prevUrl]) {
+        if (url && !this.imageCachePool.has(url)) {
+          const img = new Image();
+          img.onload = () => {
+            this.imageCachePool.add(url);
+            this.trimCachePool();
+          };
+          const cleanSrc = String(url).replace(/&amp;/g, '&');
+          img.src = cleanSrc;
+        }
       }
     },
     trimCachePool() {
-      // Keep only 3 entries: prev, current, next
       while (this.imageCachePool.size > 3) {
         const current = this.src;
         const next = state.navigation?.nextRaw;
         const prev = state.navigation?.previousRaw;
         let removed = false;
-        for (const [key] of this.imageCachePool) {
+        for (const key of this.imageCachePool) {
           if (key !== current && key !== next && key !== prev) {
             this.imageCachePool.delete(key);
             removed = true;
             break;
           }
         }
-        if (!removed) break; // safety: all entries are prev/current/next
+        if (!removed) break;
       }
     },
     clearCachePool() {
       this.imageCachePool.clear();
     },
-    async doTransition(targetUrl) {
-      const transitionFn = transitionRegistry[this.transitionType] || transitionRegistry.crossfade;
-      const imgA = this.$refs.imgA;
-      const imgB = this.$refs.imgB;
-      if (!imgA || !imgB) return;
+    navigateToImage(newSrc) {
+      // Increment generation token to invalidate any stale callbacks
+      this.transitionGeneration++;
+      const myGen = this.transitionGeneration;
+
+      const inactiveBuf = this.activeBuffer === 'A' ? 'B' : 'A';
+      const inactiveRef = inactiveBuf === 'A' ? this.$refs.imgA : this.$refs.imgB;
+      const activeRef = this.activeBuffer === 'A' ? this.$refs.imgA : this.$refs.imgB;
+
+      if (!inactiveRef || !activeRef) return;
 
       this.transitionInProgress = true;
 
-      // Determine from/to based on which buffer is active
-      const fromImg = this.activeBuffer === 'A' ? imgA : imgB;
-      const toImg = this.activeBuffer === 'A' ? imgB : imgA;
+      const cleanUrl = String(newSrc).replace(/&amp;/g, '&');
 
-      // Check cache pool
-      const cached = this.imageCachePool.get(targetUrl);
-
-      if (cached && cached.decoded) {
-        // Cache hit: fill toImg and transition
-        const cleanUrl = String(targetUrl).replace(/&amp;/g, '&');
-        toImg.src = cleanUrl;
-        const runTransition = () => {
-          transitionFn(fromImg, toImg, () => {
-            this.activeBuffer = this.activeBuffer === 'A' ? 'B' : 'A';
-            this.transitionInProgress = false;
-            this.fullImageLoaded = true;
-            this.imageLoaded = true;
-            mutations.setLoading("preview-img", false);
-            mutations.setNavigationTransitioning(false);
-            this.scheduleSetCenter();
-          });
-        };
-        toImg.onload = runTransition;
-        // If already decoded (from cache), onload may not fire
-        if (toImg.complete) {
-          toImg.onload = null;
-          runTransition();
-        }
+      if (this.imageCachePool.has(newSrc)) {
+        // Cache hit: image was preloaded, browser will fetch from cache
+        inactiveRef.src = cleanUrl;
+        this.swapBuffers(inactiveBuf, inactiveRef, activeRef, myGen);
       } else {
-        // Cache miss: show loading, wait for load
-        mutations.setNavigationTransitioning(true);
-        mutations.setLoading("preview-img", true);
-        this.fullImageLoaded = false;
-        const cleanUrl = String(targetUrl).replace(/&amp;/g, '&');
-        toImg.src = cleanUrl;
-        toImg.onload = () => {
-          transitionFn(fromImg, toImg, () => {
-            this.activeBuffer = this.activeBuffer === 'A' ? 'B' : 'A';
-            this.transitionInProgress = false;
-            this.fullImageLoaded = true;
-            this.imageLoaded = true;
-            mutations.setLoading("preview-img", false);
-            mutations.setNavigationTransitioning(false);
-            // Cache the loaded image
-            this.imageCachePool.set(targetUrl, { img: toImg, decoded: true, url: targetUrl });
-            this.trimCachePool();
-            // Preload new adjacent images
-            this.preloadAdjacentImages();
-            this.scheduleSetCenter();
-          });
+        // Cache miss: preload with detached Image, then swap
+        const preloadImg = new Image();
+        preloadImg.onload = () => {
+          if (myGen !== this.transitionGeneration) return;
+          this.imageCachePool.add(newSrc);
+          this.trimCachePool();
+          inactiveRef.src = cleanUrl;
+          this.swapBuffers(inactiveBuf, inactiveRef, activeRef, myGen);
         };
+        preloadImg.onerror = () => {
+          if (myGen !== this.transitionGeneration) return;
+          this.transitionInProgress = false;
+          this.onImageError({ target: activeRef });
+        };
+        preloadImg.src = cleanUrl;
+      }
+    },
+    swapBuffers(toBuf, toRef, fromRef, gen) {
+      if (gen !== this.transitionGeneration) return;
+
+      const type = this.transitionType;
+      const self = this;
+
+      function finishTransition() {
+        if (gen !== self.transitionGeneration) return;
+        self.activeBuffer = toBuf;
+        self.transitionInProgress = false;
+        self.fullImageLoaded = true;
+        self.imageLoaded = true;
+        mutations.setLoading("preview-img", false);
+        mutations.setNavigationTransitioning(false);
+        self.scheduleSetCenter();
+        self.preloadAdjacentImages();
+      }
+
+      if (type === 'instant') {
+        toRef.style.opacity = '1';
+        toRef.style.display = 'block';
+        fromRef.style.display = 'none';
+        fromRef.style.opacity = '1';
+        finishTransition();
+      } else if (type === 'crossfade') {
+        toRef.style.transition = 'opacity 0.3s ease';
+        toRef.style.opacity = '0';
+        toRef.style.display = 'block';
+        requestAnimationFrame(() => {
+          if (gen !== self.transitionGeneration) return;
+          toRef.style.opacity = '1';
+          fromRef.style.transition = 'opacity 0.3s ease';
+          fromRef.style.opacity = '0';
+          setTimeout(() => {
+            if (gen !== self.transitionGeneration) return;
+            fromRef.style.display = 'none';
+            fromRef.style.opacity = '1';
+            fromRef.style.transition = 'none';
+            toRef.style.transition = 'none';
+            finishTransition();
+          }, 300);
+        });
+      } else if (type === 'fade_to_black') {
+        fromRef.style.transition = 'opacity 0.15s ease';
+        fromRef.style.opacity = '0';
+        setTimeout(() => {
+          if (gen !== self.transitionGeneration) return;
+          fromRef.style.display = 'none';
+          toRef.style.opacity = '0';
+          toRef.style.display = 'block';
+          toRef.style.transition = 'opacity 0.15s ease';
+          requestAnimationFrame(() => {
+            if (gen !== self.transitionGeneration) return;
+            toRef.style.opacity = '1';
+            setTimeout(() => {
+              if (gen !== self.transitionGeneration) return;
+              toRef.style.transition = 'none';
+              finishTransition();
+            }, 150);
+          });
+        }, 150);
+      } else {
+        // Fallback: same as instant
+        toRef.style.opacity = '1';
+        toRef.style.display = 'block';
+        fromRef.style.display = 'none';
+        fromRef.style.opacity = '1';
+        finishTransition();
       }
     },
     handleImageClick(event) {
@@ -1037,7 +1063,7 @@ export default {
       // If image preloading is enabled and not TIFF, use dual-buffer transition
       if (this.imagePreloadEnabled && !this.checkIfTiff(newSrc)) {
         // Use the transition system: check cache pool, crossfade to new image
-        this.doTransition(newSrc);
+        this.navigateToImage(newSrc);
       } else {
         // Fallback: original loading behavior (for TIFF or when preload is disabled)
         this.fullImageLoaded = false;

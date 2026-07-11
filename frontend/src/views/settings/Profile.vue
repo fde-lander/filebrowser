@@ -358,6 +358,12 @@ export default {
     if (!this.localuser.imageTransition) {
       this.localuser.imageTransition = 'crossfade';
     }
+    if (typeof this.localuser.imagePreload !== 'boolean') {
+      this.localuser.imagePreload = true;
+    }
+    if (typeof this.localuser.imageTapNav !== 'boolean') {
+      this.localuser.imageTapNav = true;
+    }
   },
   methods: {
     showTooltip(event, text) {

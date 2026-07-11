@@ -1027,37 +1027,39 @@ export default {
         clearTimeout(this.loadTimeout);
         this.loadTimeout = null;
       }
-      
-      // Reset and reload when src changes
-      this.fullImageLoaded = false;
-      this.imageLoaded = false;
-      this.isTiff = this.checkIfTiff(newSrc);
-      
-      // Cache check happens automatically via thumbnailUrl computed property
-      
-      // Always load the real image
-      if (this.isTiff) {
-        this.decodeTiff(newSrc);
-      } else {
-        this.$nextTick(() => {
-          this.loadFullImage();
-          // Set a timeout to handle cases where image never loads
-          this.loadTimeout = setTimeout(() => {
-            if (!this.fullImageLoaded && !this.imageLoaded) {
-              // Show the image even if load event didn't fire (might be partially loaded)
-              this.fullImageLoaded = true;
-              this.imageLoaded = true;
-              mutations.setLoading("preview-img", false);
-              this.scheduleSetCenter();
-            }
-          }, 30000); // 30 second timeout
-        });
-      }
-      
+
+      // Reset zoom and gestures
       this.scale = 1;
       this.position.relative = { x: 0, y: 0 };
       this.resetEdgeGestureImmediate();
       this.applyImgTransform();
+
+      // If image preloading is enabled and not TIFF, use dual-buffer transition
+      if (this.imagePreloadEnabled && !this.checkIfTiff(newSrc)) {
+        // Use the transition system: check cache pool, crossfade to new image
+        this.doTransition(newSrc);
+      } else {
+        // Fallback: original loading behavior (for TIFF or when preload is disabled)
+        this.fullImageLoaded = false;
+        this.imageLoaded = false;
+        this.isTiff = this.checkIfTiff(newSrc);
+        
+        if (this.isTiff) {
+          this.decodeTiff(newSrc);
+        } else {
+          this.$nextTick(() => {
+            this.loadFullImage();
+            this.loadTimeout = setTimeout(() => {
+              if (!this.fullImageLoaded && !this.imageLoaded) {
+                this.fullImageLoaded = true;
+                this.imageLoaded = true;
+                mutations.setLoading("preview-img", false);
+                this.scheduleSetCenter();
+              }
+            }, 30000);
+          });
+        }
+      }
     },
   },
 };

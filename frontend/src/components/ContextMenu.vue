@@ -828,8 +828,13 @@ export default {
       });
     },
     showCompressImagesPrompt() {
+      const items = this.providedItems;
       mutations.closeTopPrompt();
-      mutations.showPrompt({ name: "CompressImages", pinned: true });
+      mutations.showPrompt({
+        name: "CompressImages",
+        pinned: true,
+        props: { items },
+      });
     },
     showUnarchivePrompt() {
       mutations.closeTopPrompt();

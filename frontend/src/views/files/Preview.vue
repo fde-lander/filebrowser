@@ -568,7 +568,11 @@ export default {
         return;
       }
       if (state.navigation.previousLink) {
-        mutations.setNavigationTransitioning(true);
+        // For image previews, do NOT set transitioning - let ExtendedImage's
+        // dual-buffer transition system handle the visual change smoothly
+        if (this.previewType !== 'image') {
+          mutations.setNavigationTransitioning(true);
+        }
         this.$router.replace({ path: state.navigation.previousLink });
       }
     },
@@ -584,7 +588,11 @@ export default {
         return;
       }
       if (state.navigation.nextLink) {
-        mutations.setNavigationTransitioning(true);
+        // For image previews, do NOT set transitioning - let ExtendedImage's
+        // dual-buffer transition system handle the visual change smoothly
+        if (this.previewType !== 'image') {
+          mutations.setNavigationTransitioning(true);
+        }
         this.$router.replace({ path: state.navigation.nextLink });
       }
     },

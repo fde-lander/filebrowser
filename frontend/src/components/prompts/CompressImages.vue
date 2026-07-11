@@ -228,7 +228,7 @@ export default {
   props: {
     items: {
       type: Array,
-      required: true,
+      default: () => [],
     },
   },
   data() {
@@ -283,15 +283,17 @@ export default {
     },
   },
   mounted() {
+    // Defensive guard: items may not be passed
+    if (!this.items || !Array.isArray(this.items) || this.items.length === 0) {
+      return;
+    }
     // Select all files by default
     for (const item of this.items) {
       this.selectedFiles[item.path] = true;
     }
     // Auto-preview the first file
-    if (this.items.length > 0) {
-      this.previewFile = this.items[0];
-      this.updatePreview();
-    }
+    this.previewFile = this.items[0];
+    this.updatePreview();
   },
   beforeUnmount() {
     if (this.progressSubscription) {

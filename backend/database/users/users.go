@@ -162,6 +162,16 @@ type NonAdminEditable struct {
 	SidebarLinks               []SidebarLink        `json:"sidebarLinks"`               // customizable sidebar links
 	HideFilesInTree            bool                 `json:"hideFilesInTree"`            // hide files in the sidebar tree navigation, when true, will show only directories.
 	DeleteAfterArchive         bool                 `json:"deleteAfterArchive"`         // delete source files after successful creation/extraction of archives
+	// Image viewer settings
+	ImagePreload               bool                 `json:"imagePreload"`               // background preload next/prev images
+	ImageTransition            string               `json:"imageTransition"`            // crossfade, fade_to_black, instant
+	ImageTapNav                bool                 `json:"imageTapNav"`                // tap image left/right to navigate
+	PersistentNavButtons       bool                 `json:"persistentNavButtons"`       // mobile: keep nav buttons visible
+	NavButtonOpacity           float64              `json:"navButtonOpacity"`           // nav button opacity 0.0-1.0
+	// Image compression settings
+	CompressLevel              string               `json:"compressLevel"`              // low, medium, high
+	CompressQuality            int                  `json:"compressQuality"`            // last used quality value
+	CompressBackup             bool                 `json:"compressBackup"`             // ZSTD backup before compression
 	PreferEditorForMarkdown    bool                 `json:"preferEditorForMarkdown"`    // prefer editor first for markdown files instead of the Markdown Viewer
 	ShowFirstLogin             bool                 `json:"showFirstLogin"`
 	PasskeyCredentials         []WebAuthnCredential `json:"passkeyCredentials,omitempty"`

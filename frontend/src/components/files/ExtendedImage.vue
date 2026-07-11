@@ -1,6 +1,6 @@
 <template>
   <div class="image-ex-container" ref="container" @touchstart="touchStart" @touchmove.prevent="touchMove" @touchend="touchEnd" @dblclick="zoomAuto"
-    @mousedown="mousedownStart" @mousemove="mouseMove" @mouseup="mouseUp" @wheel="wheelMove">
+    @mousedown="mousedownStart" @mousemove="mouseMove" @mouseup="mouseUp" @wheel="wheelMove" @click="handleImageClick">
     <!-- Thumbnail placeholder (shown while full image loads, only if cached thumbnail exists) -->
     <img 
       v-if="cachedThumbnailUrl && !fullImageLoaded && !isTiff" 
@@ -14,21 +14,27 @@
       <LoadingSpinner size="medium" />
     </div>
 
-    <!-- Full image: 
-         - Always loading in background via JavaScript
-         - Hidden until loaded if thumbnail exists, otherwise visible for progressive loading -->
-    <img 
-      v-if="!isTiff" 
-      class="image-ex-img" 
-      ref="imgex" 
-      @load="onLoad" 
-      @error="onImageError" 
-      :style="{ display: (cachedThumbnailUrl && !fullImageLoaded) ? 'none' : 'block' }" 
+    <!-- Full image: dual-buffer system (imgA = primary, imgB = preload/transition)
+         - imgA always loads via JavaScript, hidden until loaded if thumbnail exists
+         - imgB is used for transitions and cache pool preloading -->
+    <img
+      v-if="!isTiff"
+      class="image-ex-img image-buffer-a"
+      ref="imgA"
+      @load="onLoad"
+      @error="onImageError"
+      :style="bufferAStyle"
     />
-    <canvas 
-      v-else 
-      ref="imgex" 
-      class="image-ex-img" 
+    <img
+      v-if="!isTiff"
+      class="image-ex-img image-buffer-b"
+      ref="imgB"
+      :style="bufferBStyle"
+    />
+    <canvas
+      v-else
+      ref="imgex"
+      class="image-ex-img"
       :style="{ display: (cachedThumbnailUrl && !fullImageLoaded) ? 'none' : 'block' }"
     ></canvas>
   </div>
@@ -42,6 +48,54 @@ import { globalVars } from "@/utils/constants";
 import { getBestCachedImage } from "@/utils/imageCache";
 import { isRawImageMimeType } from "@/utils/mimetype";
 import throttle from "@/utils/throttle";
+
+// Transition registry (extensible - new transitions can be registered at runtime)
+const transitionRegistry = {
+  crossfade: function(imgA, imgB, callback) {
+    imgA.style.transition = 'opacity 0.3s ease';
+    imgB.style.transition = 'opacity 0.3s ease';
+    imgB.style.opacity = '0';
+    imgB.style.display = 'block';
+    requestAnimationFrame(() => {
+      imgB.style.opacity = '1';
+      imgA.style.opacity = '0';
+      setTimeout(() => {
+        imgA.style.display = 'none';
+        imgA.style.opacity = '1';
+        imgA.style.transition = 'none';
+        imgB.style.transition = 'none';
+        callback();
+      }, 300);
+    });
+  },
+  fade_to_black: function(imgA, imgB, callback) {
+    imgA.style.transition = 'opacity 0.15s ease';
+    imgA.style.opacity = '0';
+    setTimeout(() => {
+      imgA.style.display = 'none';
+      imgB.style.opacity = '0';
+      imgB.style.display = 'block';
+      imgB.style.transition = 'opacity 0.15s ease';
+      requestAnimationFrame(() => {
+        imgB.style.opacity = '1';
+        setTimeout(() => {
+          imgB.style.transition = 'none';
+          imgA.style.opacity = '1';
+          callback();
+        }, 150);
+      });
+    }, 150);
+  },
+  instant: function(imgA, imgB, callback) {
+    imgA.style.display = 'none';
+    imgB.style.display = 'block';
+    callback();
+  },
+};
+
+function registerTransition(name, fn) {
+  transitionRegistry[name] = fn;
+}
 
 export default {
   components: {
@@ -96,6 +150,16 @@ export default {
       edgeCommitY: 110,
       edgeRubberMax: 100,
       pinchActive: false,
+      // Dual-buffer + cache pool
+      imageCachePool: new Map(), // URL -> { img: HTMLImageElement, decoded: boolean, url: string }
+      activeBuffer: 'A', // which img element is currently showing ('A' or 'B')
+      bufferA: { loaded: false, url: null },
+      bufferB: { loaded: false, url: null },
+      transitionInProgress: false,
+      tapNavTimeout: null,
+      wasDragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
     };
   },
   computed: {
@@ -159,6 +223,39 @@ export default {
       const ay = Math.abs(this.edgeDy);
       return this.edgeDy >= this.edgeCommitY && ay >= ax;
     },
+    // Dual-buffer display styles
+    bufferAStyle() {
+      // Hide active buffer while thumbnail is showing and full image hasn't loaded
+      const showDuringThumbnail = this.cachedThumbnailUrl && !this.fullImageLoaded;
+      return {
+        display: (this.activeBuffer === 'A' && !showDuringThumbnail) ? 'block' : 'none',
+        opacity: this.transitionInProgress ? undefined : 1,
+        transition: this.transitionInProgress ? 'opacity 0.3s ease' : 'none',
+      };
+    },
+    bufferBStyle() {
+      const showDuringThumbnail = this.cachedThumbnailUrl && !this.fullImageLoaded;
+      return {
+        display: (this.activeBuffer === 'B' && !showDuringThumbnail) ? 'block' : 'none',
+        opacity: this.transitionInProgress ? undefined : 1,
+        transition: this.transitionInProgress ? 'opacity 0.3s ease' : 'none',
+      };
+    },
+    // Settings with safe defaults (fields may not exist in store yet)
+    imagePreloadEnabled() {
+      return state.user?.imagePreload !== false; // default true
+    },
+    imageTapNavEnabled() {
+      return state.user?.imageTapNav !== false; // default true
+    },
+    transitionType() {
+      return state.user?.imageTransition || 'crossfade'; // default crossfade
+    },
+    // Returns the currently active image DOM element (imgA, imgB, or imgex for TIFF)
+    activeImgEl() {
+      if (this.isTiff) return this.$refs.imgex;
+      return this.activeBuffer === 'A' ? this.$refs.imgA : this.$refs.imgB;
+    },
   },
   mounted() {
     this.isTiff = this.checkIfTiff(this.src);
@@ -198,6 +295,12 @@ export default {
       clearTimeout(this.disabledTimer);
       this.disabledTimer = null;
     }
+    // Dual-buffer cleanup
+    this.clearCachePool();
+    if (this.tapNavTimeout) {
+      clearTimeout(this.tapNavTimeout);
+      this.tapNavTimeout = null;
+    }
     this.teardownEdgeMouseListeners();
     mutations.setNavigationGestureHint({});
     window.removeEventListener("resize", this.onResize);
@@ -231,10 +334,19 @@ export default {
       // Set src directly via JavaScript to avoid Vue's HTML entity encoding in template bindings
       // Vue HTML-encodes & to &amp; when using :src="src" in templates
       this.$nextTick(() => {
-        if (this.$refs.imgex && 'src' in this.$refs.imgex) {
-          // Decode any HTML entities (Vue shouldn't encode props, but decode just in case)
-          const cleanSrc = String(this.src).replace(/&amp;/g, '&');
-          this.$refs.imgex.src = cleanSrc;
+        if (this.isTiff) {
+          // TIFF uses canvas with ref="imgex"
+          if (this.$refs.imgex && 'src' in this.$refs.imgex) {
+            const cleanSrc = String(this.src).replace(/&amp;/g, '&');
+            this.$refs.imgex.src = cleanSrc;
+          }
+        } else {
+          // Non-TIFF uses dual-buffer: load into active buffer
+          const activeRef = this.activeBuffer === 'A' ? this.$refs.imgA : this.$refs.imgB;
+          if (activeRef && 'src' in activeRef) {
+            const cleanSrc = String(this.src).replace(/&amp;/g, '&');
+            activeRef.src = cleanSrc;
+          }
         }
       });
     },
@@ -248,6 +360,23 @@ export default {
         this.loadTimeout = null;
       }
       mutations.setLoading("preview-img", false);
+
+      // Store in cache pool
+      if (this.src) {
+        const activeRef = this.isTiff ? this.$refs.imgex : (this.activeBuffer === 'A' ? this.$refs.imgA : this.$refs.imgB);
+        if (activeRef) {
+          this.imageCachePool.set(this.src, {
+            img: activeRef,
+            decoded: true,
+            url: this.src,
+          });
+          this.trimCachePool();
+        }
+      }
+
+      // Trigger background preload of next/prev images
+      this.preloadAdjacentImages();
+
       // fullImageLoaded flips display from none → block via :style. Vue hasn't
       // updated the DOM yet, so setCenter() in the same tick sees clientWidth/Height 0.
       // Defer until after layout so centering / transform apply correctly.
@@ -274,6 +403,145 @@ export default {
       }
       this.scheduleSetCenter();
     },
+    preloadAdjacentImages() {
+      if (!this.imagePreloadEnabled) return;
+
+      const nextUrl = state.navigation?.nextRaw;
+      const prevUrl = state.navigation?.previousRaw;
+
+      if (nextUrl && !this.imageCachePool.has(nextUrl)) {
+        const img = new Image();
+        img.onload = () => {
+          this.imageCachePool.set(nextUrl, { img, decoded: true, url: nextUrl });
+          this.trimCachePool();
+        };
+        const cleanSrc = String(nextUrl).replace(/&amp;/g, '&');
+        img.src = cleanSrc;
+      }
+
+      if (prevUrl && !this.imageCachePool.has(prevUrl)) {
+        const img = new Image();
+        img.onload = () => {
+          this.imageCachePool.set(prevUrl, { img, decoded: true, url: prevUrl });
+          this.trimCachePool();
+        };
+        const cleanSrc = String(prevUrl).replace(/&amp;/g, '&');
+        img.src = cleanSrc;
+      }
+    },
+    trimCachePool() {
+      // Keep only 3 entries: prev, current, next
+      while (this.imageCachePool.size > 3) {
+        const current = this.src;
+        const next = state.navigation?.nextRaw;
+        const prev = state.navigation?.previousRaw;
+        let removed = false;
+        for (const [key] of this.imageCachePool) {
+          if (key !== current && key !== next && key !== prev) {
+            this.imageCachePool.delete(key);
+            removed = true;
+            break;
+          }
+        }
+        if (!removed) break; // safety: all entries are prev/current/next
+      }
+    },
+    clearCachePool() {
+      this.imageCachePool.clear();
+    },
+    async doTransition(targetUrl) {
+      const transitionFn = transitionRegistry[this.transitionType] || transitionRegistry.crossfade;
+      const imgA = this.$refs.imgA;
+      const imgB = this.$refs.imgB;
+      if (!imgA || !imgB) return;
+
+      this.transitionInProgress = true;
+
+      // Determine from/to based on which buffer is active
+      const fromImg = this.activeBuffer === 'A' ? imgA : imgB;
+      const toImg = this.activeBuffer === 'A' ? imgB : imgA;
+
+      // Check cache pool
+      const cached = this.imageCachePool.get(targetUrl);
+
+      if (cached && cached.decoded) {
+        // Cache hit: fill toImg and transition
+        const cleanUrl = String(targetUrl).replace(/&amp;/g, '&');
+        toImg.src = cleanUrl;
+        const runTransition = () => {
+          transitionFn(fromImg, toImg, () => {
+            this.activeBuffer = this.activeBuffer === 'A' ? 'B' : 'A';
+            this.transitionInProgress = false;
+            this.fullImageLoaded = true;
+            this.imageLoaded = true;
+            mutations.setLoading("preview-img", false);
+            mutations.setNavigationTransitioning(false);
+            this.scheduleSetCenter();
+          });
+        };
+        toImg.onload = runTransition;
+        // If already decoded (from cache), onload may not fire
+        if (toImg.complete) {
+          toImg.onload = null;
+          runTransition();
+        }
+      } else {
+        // Cache miss: show loading, wait for load
+        mutations.setNavigationTransitioning(true);
+        mutations.setLoading("preview-img", true);
+        this.fullImageLoaded = false;
+        const cleanUrl = String(targetUrl).replace(/&amp;/g, '&');
+        toImg.src = cleanUrl;
+        toImg.onload = () => {
+          transitionFn(fromImg, toImg, () => {
+            this.activeBuffer = this.activeBuffer === 'A' ? 'B' : 'A';
+            this.transitionInProgress = false;
+            this.fullImageLoaded = true;
+            this.imageLoaded = true;
+            mutations.setLoading("preview-img", false);
+            mutations.setNavigationTransitioning(false);
+            // Cache the loaded image
+            this.imageCachePool.set(targetUrl, { img: toImg, decoded: true, url: targetUrl });
+            this.trimCachePool();
+            // Preload new adjacent images
+            this.preloadAdjacentImages();
+            this.scheduleSetCenter();
+          });
+        };
+      }
+    },
+    handleImageClick(event) {
+      if (!this.imageTapNavEnabled) return;
+      if (this.scale > 1) return; // disabled when zoomed
+      if (this.wasDragging) {
+        this.wasDragging = false;
+        return;
+      }
+
+      // 200ms delay for double-tap detection
+      if (this.tapNavTimeout) {
+        clearTimeout(this.tapNavTimeout);
+        this.tapNavTimeout = null;
+        return; // second click = double tap, let dblclick handle
+      }
+
+      this.tapNavTimeout = setTimeout(() => {
+        this.tapNavTimeout = null;
+        const container = this.$refs.container;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const width = rect.width;
+        const ratio = clickX / width;
+
+        if (ratio < 0.4 && this.hasImagePrevious) {
+          this.$emit('navigate-previous');
+        } else if (ratio > 0.6 && this.hasImageNext) {
+          this.$emit('navigate-next');
+        }
+        // Center 20% = no action
+      }, 200);
+    },
     checkIfTiff(src) {
       const sufs = ["tif", "tiff", "dng", "cr2", "nef"];
       const suff = src.split(".").pop().toLowerCase();
@@ -286,7 +554,7 @@ export default {
           throw new Error("Network response was not ok");
         }
         const blob = await response.blob();
-        const imgex = this.$refs.imgex;
+        const imgex = this.$refs.imgex; // TIFF still uses canvas ref="imgex"
         if (imgex) {
           imgex.src = URL.createObjectURL(blob);
           imgex.onload = () => URL.revokeObjectURL(imgex.src);
@@ -302,7 +570,7 @@ export default {
       this.$nextTick(() => {
         requestAnimationFrame(() => {
           this.setCenter();
-          const img = this.$refs.imgex;
+          const img = this.activeImgEl;
           const container = this.$refs.container;
           if (
             img &&
@@ -343,7 +611,7 @@ export default {
       return sign * (max + (a - max) * 0.32);
     },
     applyImgTransform() {
-      const img = this.$refs.imgex;
+      const img = this.activeImgEl;
       if (!img) {
         return;
       }
@@ -543,7 +811,7 @@ export default {
     },
     setCenter() {
       const container = this.$refs.container;
-      const img = this.$refs.imgex;
+      const img = this.activeImgEl;
       if (!container || !img?.clientWidth || !img?.clientHeight) {
         return;
       }
@@ -555,6 +823,10 @@ export default {
     },
     mousedownStart(event) {
       if (event.button !== 0) return;
+      // Track drag start for tap suppression
+      this.dragStartX = event.clientX;
+      this.dragStartY = event.clientY;
+      this.wasDragging = false;
       if (this.scale === 1) {
         this.teardownEdgeMouseListeners();
         this.edgeMouseActive = true;
@@ -576,6 +848,14 @@ export default {
     },
     mouseMove(event) {
       if (event.button !== 0) return;
+      // Drag detection for tap suppression
+      if (this.dragStartX || this.dragStartY) {
+        const deltaX = Math.abs(event.clientX - this.dragStartX);
+        const deltaY = Math.abs(event.clientY - this.dragStartY);
+        if (deltaX > 10 || deltaY > 10) {
+          this.wasDragging = true;
+        }
+      }
       if (this.scale > 1 && this.inDrag) {
         this.doMove(event.movementX, event.movementY);
         event.preventDefault();
@@ -662,7 +942,7 @@ export default {
           this.lastTouchDistance = touchDistance;
           return;
         }
-        let newScale = this.scale + (touchDistance - this.lastTouchDistance) / (this.$refs.imgex.width / 5);
+        let newScale = this.scale + (touchDistance - this.lastTouchDistance) / (this.activeImgEl.width / 5);
         newScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
         if (newScale !== this.scale) {
           this.scale = newScale;
@@ -808,6 +1088,19 @@ export default {
   /* translate3d tends to composite more reliably than translate with decoded <img> bitmaps */
   transform: translate3d(-50%, -50%, 0);
   object-fit: contain;
+}
+
+.image-buffer-a, .image-buffer-b {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .image-loading-overlay {

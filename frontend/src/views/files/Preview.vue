@@ -9,7 +9,7 @@
       'plyr-background-dark': isDarkMode && previewType === 'audio' && !useDefaultMediaPlayer,
       'transitioning': isTransitioning
     }" v-if="!isDeleted">
-      <ExtendedImage v-if="showImage && !isTransitioning" :src="raw" @navigate-previous="navigatePrevious"
+      <ExtendedImage v-if="showImage" :src="raw" @navigate-previous="navigatePrevious"
         @navigate-next="navigateNext" @close-preview="exitPreviewFromImageGesture" />
 
       <!-- Media: load full metadata + album art from media API before mounting plyr so the correct view/art is stable. -->

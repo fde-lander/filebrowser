@@ -71,6 +71,12 @@
         @action="showArchivePrompt"
       />
       <action
+        v-if="showCompressImages"
+        icon="compress"
+        :label="$t('prompts.compressImages')"
+        @action="showCompressImagesPrompt"
+      />
+      <action
         v-if="showInfo"
         icon="info"
         :label="$t('general.info')"
@@ -207,6 +213,7 @@ import Action from "@/components/Action.vue";
 import { notify } from "@/notify";
 import { getters, mutations, state } from "@/store";
 import { url } from "@/utils";
+import { isImageFilePath } from "@/utils/mimetype";
 import buttons from "@/utils/buttons";
 import { copyToClipboard } from "@/utils/clipboard";
 import { globalVars } from "@/utils/constants.js";
@@ -321,6 +328,16 @@ export default {
         this.selectedCount > 0 &&
         !this.showUnarchive &&
         !this.isSearchActive
+      );
+    },
+    showCompressImages() {
+      if (this.showLimitedOptions || getters.isShare()) return false;
+      if (!this.permissions.create) return false;
+      if (this.showCreate) return false;
+      if (this.selectedCount === 0) return false;
+      // Show if any selected item is an image or a directory
+      return this.providedItems.some(item =>
+        item.isDir || isImageFilePath(item.path || item.from || item.name)
       );
     },
     showUnarchive() {
@@ -809,6 +826,10 @@ export default {
           currentPath: state.req.path || "/",
         },
       });
+    },
+    showCompressImagesPrompt() {
+      mutations.closeTopPrompt();
+      mutations.showPrompt({ name: "CompressImages", pinned: true });
     },
     showUnarchivePrompt() {
       mutations.closeTopPrompt();

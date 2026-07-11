@@ -183,6 +183,39 @@
 
           </div>
         </SettingsItem>
+        <SettingsItem aria-label="imageViewerOptions" :title="$t('profileSettings.imageViewerOptions')" :collapsable="true"
+          :start-collapsed="true" :force-collapsed="isSectionCollapsed('imageViewerOptions')"
+          @toggle="handleSectionToggle('imageViewerOptions')">
+          <div class="settings-items">
+            <ToggleSwitch class="item" v-model="localuser.imagePreload" @change="updateSettings"
+              :name="$t('profileSettings.imagePreload')"
+              :description="$t('profileSettings.imagePreloadDescription')" />
+            <div class="settings-item-select">
+              <label>{{ $t('profileSettings.imageTransition') }}</label>
+              <select class="input" v-model="localuser.imageTransition" @change="updateSettings">
+                <option value="crossfade">{{ $t('profileSettings.imageTransitionCrossfade') }}</option>
+                <option value="fade_to_black">{{ $t('profileSettings.imageTransitionFadeToBlack') }}</option>
+                <option value="instant">{{ $t('profileSettings.imageTransitionInstant') }}</option>
+              </select>
+            </div>
+            <ToggleSwitch class="item" v-model="localuser.imageTapNav" @change="updateSettings"
+              :name="$t('profileSettings.imageTapNav')"
+              :description="$t('profileSettings.imageTapNavDescription')" />
+            <ToggleSwitch class="item" v-model="localuser.persistentNavButtons" @change="updateSettings"
+              :name="$t('profileSettings.persistentNavButtons')"
+              :description="$t('profileSettings.persistentNavButtonsDescription')" />
+            <RangeSlider
+              class="item"
+              v-model="localuser.navButtonOpacity"
+              @update:modelValue="updateSettings"
+              :min="0"
+              :max="1"
+              :step="0.1"
+              displayFormat="percent"
+              :name="$t('profileSettings.navButtonOpacity')"
+            />
+          </div>
+        </SettingsItem>
         <SettingsItem aria-label="themeLanguage" :title="$t('profileSettings.themeAndLanguage')" :collapsable="true"
           :start-collapsed="true" :force-collapsed="isSectionCollapsed('themeLanguage')"
           @toggle="handleSectionToggle('themeLanguage')">
@@ -217,6 +250,7 @@ import Languages from "@/components/settings/Languages.vue";
 import ButtonGroup from "@/components/ButtonGroup.vue";
 import ToggleSwitch from "@/components/settings/ToggleSwitch.vue";
 import SettingsItem from "@/components/settings/SettingsItem.vue";
+import RangeSlider from "@/components/settings/RangeSlider.vue";
 
 export default {
   name: "settings",
@@ -225,6 +259,7 @@ export default {
     ButtonGroup,
     ToggleSwitch,
     SettingsItem,
+    RangeSlider,
   },
   data() {
     return {
@@ -315,6 +350,13 @@ export default {
     this.formHideExt = this.localuser.hideFileExt;
     if (typeof this.localuser.showToolsInSidebar !== 'boolean') {
       this.localuser.showToolsInSidebar = true;
+    }
+    // Set defaults for image viewer settings
+    if (typeof this.localuser.navButtonOpacity !== 'number') {
+      this.localuser.navButtonOpacity = 1.0;
+    }
+    if (!this.localuser.imageTransition) {
+      this.localuser.imageTransition = 'crossfade';
     }
   },
   methods: {
@@ -412,6 +454,11 @@ export default {
           "debugOffice",
           "preferEditorForMarkdown",
           "showToolsInSidebar",
+          "imagePreload",
+          "imageTransition",
+          "imageTapNav",
+          "persistentNavButtons",
+          "navButtonOpacity",
         ]);
         notify.showSuccessToast(
           this.$t('settings.settingsUpdated')
@@ -456,5 +503,16 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.settings-item-select {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5em 0;
+}
+
+.settings-item-select label {
+  margin-bottom: 0.3em;
+  font-weight: 500;
 }
 </style>

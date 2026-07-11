@@ -25,8 +25,8 @@
     @touchstart="handleTouchStart($event, 'previous')"
     @touchmove="handleButtonTouchMove"
     @touchend.prevent="handleTouchEnd"
-    @mouseover="setHoverNav(true)"
-    @mouseleave="setHoverNav(false)"
+    @mouseover="setHoverNav(true); hoverBoostOpacity = true"
+    @mouseleave="setHoverNav(false); hoverBoostOpacity = false"
     class="nav-button nav-previous"
     :class="{
       hidden: !showNav,
@@ -37,7 +37,7 @@
       'media-mode': isMediaQueueMode,
       'sidebar-resizing': isSidebarResizing,
     }"
-    :style="previousButtonStyle"
+    :style="[previousButtonStyle, { opacity: navButtonOpacityStyle }]"
     :aria-label="$t('general.previous')"
     :title="$t('general.previous')"
   >
@@ -55,11 +55,11 @@
     @touchstart="handleTouchStart($event, 'next')"
     @touchmove="handleButtonTouchMove"
     @touchend.prevent="handleTouchEnd"
-    @mouseover="setHoverNav(true)"
-    @mouseleave="setHoverNav(false)"
+    @mouseover="setHoverNav(true); hoverBoostOpacity = true"
+    @mouseleave="setHoverNav(false); hoverBoostOpacity = false"
     class="nav-button nav-next"
     :class="{ hidden: !showNav, dragging: dragState.type === 'next', active: (dragState.atFullExtent && dragState.type === 'next') || (gestureHint === 'next' && gestureHintCommitReady), 'dark-mode': isDarkMode, 'media-mode': isMediaQueueMode}"
-    :style="nextButtonStyle"
+    :style="[nextButtonStyle, { opacity: navButtonOpacityStyle }]"
     :aria-label="$t('general.next')"
     :title="$t('general.next')"
   >
@@ -133,6 +133,7 @@ export default {
         triggered: false
       },
       isSidebarResizing: false, // Track if sidebar is being resized
+      hoverBoostOpacity: false, // When true, force opacity to 1 on hover
     };
   },
   computed: {
@@ -255,7 +256,11 @@ export default {
       // Next button doesn't need account for the sidebar
       styles.right = '1em';
       return styles;
-    }
+    },
+    navButtonOpacityStyle() {
+      if (this.hoverBoostOpacity) return 1.0;
+      return state.user.navButtonOpacity ?? 1.0;
+    },
   },
   watch: {
     currentView() {
@@ -479,6 +484,12 @@ export default {
     showInitialNavigation() {
       // Show navigation initially for 3 seconds when navigation is set up
       if (this.enabled && (this.hasPrevious || this.hasNext || this.autoShowNavForMediaPreview)) {
+        // Persistent buttons on mobile: show nav without auto-hide timeout
+        if (state.isMobile && state.user.persistentNavButtons === true) {
+          mutations.setNavigationShow(true);
+          return;
+        }
+
         mutations.setNavigationShow(true);
 
         mutations.clearNavigationTimeout();

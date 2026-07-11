@@ -111,6 +111,7 @@ import Unarchive from "./Unarchive.vue";
 import ExtractToFolder from "./ExtractToFolder.vue";
 import OfficeDebug from "./OfficeDebug.vue";
 import ThreeJSControls from "./ThreeJSControls.vue";
+import CompressImages from "@/components/prompts/CompressImages.vue";
 import { state, getters, mutations } from "@/store";
 import { getObjectProperty, omitObjectProperty, setObjectProperty } from "@/utils/object.js";
 
@@ -152,6 +153,7 @@ export default {
     ExtractToFolder,
     OfficeDebug,
     ThreeJSControls,
+    CompressImages,
   },
   data() {
     return {
@@ -359,6 +361,8 @@ export default {
           return this.$t("prompts.extractToFolder");
         case "threejscontrols":
           return this.$t("threejs.controls");
+        case "compressimages":
+          return this.$t("prompts.compressImages");
         default:
           console.error("[Prompts.vue] unknown prompt name", promptName);
           // Fallback for unknown prompt types

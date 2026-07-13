@@ -194,6 +194,7 @@
               <label>{{ $t('profileSettings.imageTransition') }}</label>
               <select class="input" v-model="localuser.imageTransition" @change="updateSettings">
                 <option value="crossfade">{{ $t('profileSettings.imageTransitionCrossfade') }}</option>
+                <option value="fade">{{ $t('profileSettings.imageTransitionFade') }}</option>
                 <option value="fade_to_black">{{ $t('profileSettings.imageTransitionFadeToBlack') }}</option>
                 <option value="instant">{{ $t('profileSettings.imageTransitionInstant') }}</option>
               </select>

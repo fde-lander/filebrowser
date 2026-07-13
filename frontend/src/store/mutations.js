@@ -603,6 +603,7 @@ export const mutations = {
           "sidebarLinks",
           "fileLoading",
           "deleteAfterArchive",
+          "compressBackup",
           "preferEditorForMarkdown",
         ].includes(key)
       );

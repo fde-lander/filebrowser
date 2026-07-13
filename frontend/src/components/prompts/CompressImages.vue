@@ -143,6 +143,7 @@
         <ToggleSwitch
           class="item"
           v-model="backupEnabled"
+          @change="onBackupToggle"
           :name="$t('prompts.compressBackup')"
           :description="$t('prompts.compressBackupDescription')"
         />
@@ -219,7 +220,7 @@
 </template>
 
 <script>
-import { mutations } from "@/store";
+import { state, mutations } from "@/store";
 import { notify } from "@/notify";
 import { previewCompress, startCompress, pollStatus } from "@/api/compress.js";
 import { getPreviewURL } from "@/api/resources.js";
@@ -254,7 +255,7 @@ export default {
       previewLoading: false,
       previewOverlay: false,
       fullscreenUrl: null,
-      backupEnabled: false,
+      backupEnabled: true,
       compressing: false,
       showConfirm: false,
       zoomUrl: null,
@@ -313,6 +314,8 @@ export default {
     if (!this.items || !Array.isArray(this.items) || this.items.length === 0) {
       return;
     }
+    // Read backup preference from store (default ON)
+    this.backupEnabled = state.user?.compressBackup ?? true;
     // Select all files by default
     for (const item of this.items) {
       this.selectedFiles[item.path] = true;
@@ -327,6 +330,9 @@ export default {
   methods: {
     closeTopPrompt() {
       mutations.closeTopPrompt();
+    },
+    onBackupToggle() {
+      mutations.updateCurrentUser({ compressBackup: this.backupEnabled });
     },
     getFolder(path) {
       const parts = path.split("/");

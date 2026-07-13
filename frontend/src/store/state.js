@@ -64,6 +64,7 @@ export const state = reactive({
     stickySidebar: stickyStartup(),
     hideFilesInTree: false,
     deleteAfterArchive: true,
+    compressBackup: false,
     locale: detectLocale(), // Default to the locale from moment
     viewMode: 'normal', // Default to mosaic view
     showHidden: false, // Default to false, assuming this is a boolean

@@ -450,6 +450,7 @@ export default {
           "hideFileExt",
           "deleteWithoutConfirming",
           "deleteAfterArchive",
+          "compressBackup",
           "preview",
           "disableQuickToggles",
           "disableSearchOptions",

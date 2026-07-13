@@ -558,6 +558,18 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 		return http.StatusBadRequest, fmt.Errorf("no valid files to compress")
 	}
 
+	// Resolve backup path to real filesystem path before goroutine
+	var realBackupPath string
+	var sourceRootPath string
+	if req.Backup && req.BackupPath != "" {
+		var errBackup error
+		realBackupPath, errBackup = resolveCompressPath(req.Source, req.BackupPath, d)
+		if errBackup != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to resolve backup path: %v", errBackup)
+		}
+		sourceRootPath, _ = resolveCompressPath(req.Source, "/", d)
+	}
+
 	taskID := fmt.Sprintf("compress-%d", time.Now().UnixNano())
 	progressMgr.createTask(taskID)
 
@@ -565,19 +577,40 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 	go func() {
 		defer progressMgr.closeTask(taskID)
 
-		backupPath := ""
-		// Step 1: ZSTD backup
+		backupPathDisplay := ""
+		backupFallback := false
+		// Step 1: ZSTD backup with 3-level fallback
 		if req.Backup {
-			backupPath = filepath.Join(req.BackupPath, req.BackupName)
-			err := createBackup(realPaths, backupPath)
+			// Level 1: same-level directory (original backupPath)
+			realBackupFull := filepath.Join(realBackupPath, req.BackupName)
+			err := createBackup(realPaths, realBackupFull)
+
 			if err != nil {
-				logger.Errorf("compress: backup failed: %v", err)
+				// Level 2: try parent directory
+				parentDir := filepath.Dir(realBackupPath)
+				realBackupFull = filepath.Join(parentDir, req.BackupName)
+				err = createBackup(realPaths, realBackupFull)
+				backupFallback = true
+			}
+
+			if err != nil && sourceRootPath != "" {
+				// Level 3: try source root
+				realBackupFull = filepath.Join(sourceRootPath, req.BackupName)
+				err = createBackup(realPaths, realBackupFull)
+				backupFallback = true
+			}
+
+			if err != nil {
+				// All 3 levels failed - abort compression
+				logger.Errorf("compress: backup failed at all levels: %v", err)
 				progressMgr.sendFinish(taskID, finishEvent{
 					Failed:     len(realPaths),
 					BackupPath: "",
 				})
 				return
 			}
+
+			backupPathDisplay = filepath.Join(req.BackupPath, req.BackupName)
 		}
 
 		// Step 2: Serial compression
@@ -621,10 +654,11 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 
 		// Send finish event
 		progressMgr.sendFinish(taskID, finishEvent{
-			Success:   success,
-			Skipped:   skipped,
-			Failed:    failed,
-			BackupPath: backupPath,
+			Success:        success,
+			Skipped:        skipped,
+			Failed:         failed,
+			BackupPath:     backupPathDisplay,
+			BackupFallback: backupFallback,
 		})
 	}()
 

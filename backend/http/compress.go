@@ -58,10 +58,11 @@ type progressEvent struct {
 }
 
 type finishEvent struct {
-	Success    int    `json:"success"`
-	Skipped    int    `json:"skipped"`
-	Failed     int    `json:"failed"`
-	BackupPath string `json:"backupPath"`
+	Success        int    `json:"success"`
+	Skipped        int    `json:"skipped"`
+	Failed         int    `json:"failed"`
+	BackupPath     string `json:"backupPath"`
+	BackupFallback bool   `json:"backupFallback"`
 }
 
 type errorEvent struct {

@@ -51,8 +51,10 @@
                 :key="file.path"
                 class="compress-file-item"
                 :class="{ 'compress-file-item--selected': selectedFiles[file.path] }"
+                @click="handleFileClick(file, $event)"
               >
                 <input
+                  v-if="!previewMode"
                   type="checkbox"
                   v-model="selectedFiles[file.path]"
                 />
@@ -123,46 +125,17 @@
             :min="qualityRange.min"
             :max="qualityRange.max"
             v-model.number="quality"
-            @change="updatePreview"
           />
           <span class="compress-quality-range">{{ qualityRange.min }} - {{ qualityRange.max }}</span>
         </div>
       </div>
 
-      <!-- Preview Comparison -->
-      <div v-if="previewUrls.original || previewUrls.compressed" class="compress-preview-section">
-        <p class="prompts-label">{{ $t("prompts.compressPreview") }}</p>
-        <div class="compress-preview-container">
-          <div class="compress-preview-item">
-            <span class="compress-preview-label">{{ $t("prompts.compressOriginal") }}</span>
-            <img
-              v-if="previewUrls.original"
-              :src="previewUrls.original"
-              class="compress-preview-img clickable"
-              @click="zoomImage(previewUrls.original)"
-              alt="Original"
-            />
-            <span v-if="previewData.originalSize" class="compress-preview-size">
-              {{ formatSize(previewData.originalSize) }}
-            </span>
-          </div>
-          <div class="compress-preview-item">
-            <span class="compress-preview-label">{{ $t("prompts.compressCompressed") }}</span>
-            <img
-              v-if="previewUrls.compressed"
-              :src="previewUrls.compressed"
-              class="compress-preview-img clickable"
-              @click="zoomImage(previewUrls.compressed)"
-              alt="Compressed"
-            />
-            <span v-if="previewData.compressedSize" class="compress-preview-size">
-              {{ formatSize(previewData.compressedSize) }}
-              <span v-if="previewData.savingsPercent" class="compress-savings">
-                (−{{ previewData.savingsPercent }}%)
-              </span>
-            </span>
-          </div>
-        </div>
+      <!-- Preview mode toggle -->
+      <div class="compress-preview-toggle">
+        <label>
+          <input type="checkbox" v-model="previewMode" />
+          {{ $t("prompts.compressPreviewToggle") }}
+        </label>
       </div>
 
       <!-- Options -->
@@ -180,9 +153,46 @@
     </div>
   </div>
 
-  <!-- Zoom Overlay -->
-  <div v-if="zoomUrl" class="compress-zoom-overlay" @click="zoomUrl = null">
-    <img :src="zoomUrl" class="compress-zoom-img" alt="Zoomed" />
+  <!-- Preview Overlay -->
+  <div v-if="previewOverlay" class="compress-preview-overlay">
+    <div class="compress-preview-header">
+      <button class="compress-preview-back-btn" @click="closePreview">
+        <i class="material-symbols">arrow_back</i>
+        {{ $t("prompts.compressPreviewBack") }}
+      </button>
+    </div>
+    <div class="compress-preview-body">
+      <div class="compress-preview-item" @click="openFullscreen(previewUrls.original)">
+        <span class="compress-preview-label">{{ $t("prompts.compressOriginal") }}</span>
+        <img v-if="previewUrls.original" :src="previewUrls.original"
+             class="compress-preview-img" alt="Original" />
+        <span v-if="previewData.originalSize" class="compress-preview-size">
+          {{ formatSize(previewData.originalSize) }}
+        </span>
+      </div>
+      <div class="compress-preview-item" @click="openFullscreen(previewUrls.compressed)">
+        <span class="compress-preview-label">{{ $t("prompts.compressCompressed") }}</span>
+        <LoadingSpinner v-if="previewLoading" size="small" />
+        <img v-if="previewUrls.compressed && !previewLoading"
+             :src="previewUrls.compressed"
+             class="compress-preview-img compress-preview-fade-in"
+             alt="Compressed" />
+        <span v-if="previewData.compressedSize && !previewLoading" class="compress-preview-size">
+          {{ formatSize(previewData.compressedSize) }}
+          <span v-if="previewData.savingsPercent" class="compress-savings">
+            (−{{ previewData.savingsPercent }}%)
+          </span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Overlay -->
+  <div v-if="fullscreenUrl" class="compress-fullscreen-overlay" @click.self="closeFullscreen">
+    <img :src="fullscreenUrl" class="compress-fullscreen-img" />
+    <button class="compress-fullscreen-back" @click="closeFullscreen">
+      <i class="material-symbols">arrow_back</i>
+    </button>
   </div>
 
   <!-- Action Buttons -->
@@ -212,6 +222,7 @@
 import { mutations } from "@/store";
 import { notify } from "@/notify";
 import { previewCompress, startCompress, subscribeProgress } from "@/api/compress.js";
+import { getPreviewURL } from "@/api/resources.js";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import ToggleSwitch from "@/components/settings/ToggleSwitch.vue";
 
@@ -239,6 +250,10 @@ export default {
       previewFile: null,
       previewUrls: { original: null, compressed: null },
       previewData: { originalSize: 0, compressedSize: 0, savingsPercent: 0 },
+      previewMode: false,
+      previewLoading: false,
+      previewOverlay: false,
+      fullscreenUrl: null,
       backupEnabled: false,
       compressing: false,
       showConfirm: false,
@@ -302,11 +317,9 @@ export default {
     for (const item of this.items) {
       this.selectedFiles[item.path] = true;
     }
-    // Auto-preview the first file
-    this.previewFile = this.items[0];
-    this.updatePreview();
   },
   beforeUnmount() {
+    this.cleanupBlobUrls();
     if (this.progressSubscription) {
       this.progressSubscription.close();
     }
@@ -326,11 +339,30 @@ export default {
     selectTier(tier) {
       this.selectedTier = tier;
       this.quality = TIER_RANGES[tier].default;
-      this.updatePreview();
     },
-    async updatePreview() {
-      if (!this.previewFile) return;
-      const file = this.previewFile;
+    handleFileClick(file, event) {
+      if (this.previewMode) {
+        event.preventDefault();
+        this.openPreview(file);
+      }
+    },
+    async openPreview(file) {
+      this.previewOverlay = true;
+      this.previewLoading = true;
+      this.previewFile = file;
+
+      // Revoke previous blob URLs
+      this.cleanupBlobUrls();
+
+      // Get original image URL (instant)
+      this.previewUrls.original = getPreviewURL(file.source, file.path, file.modified);
+
+      // Reset compressed side
+      this.previewUrls.compressed = null;
+      this.previewData.originalSize = file.size || 0;
+      this.previewData.compressedSize = 0;
+      this.previewData.savingsPercent = 0;
+
       try {
         const result = await previewCompress({
           source: file.source,
@@ -338,10 +370,11 @@ export default {
           level: this.selectedTier,
           quality: this.quality,
         });
-        this.previewUrls.original = result.previewUrl || null;
-        this.previewUrls.compressed = result.compressedPreviewUrl || null;
+
+        this.previewUrls.compressed = URL.createObjectURL(result.blob);
         this.previewData.originalSize = result.originalSize || file.size || 0;
         this.previewData.compressedSize = result.compressedSize || 0;
+
         if (this.previewData.originalSize > 0 && this.previewData.compressedSize > 0) {
           const savings = Math.round(
             (1 - this.previewData.compressedSize / this.previewData.originalSize) * 100
@@ -349,8 +382,27 @@ export default {
           this.previewData.savingsPercent = savings > 0 ? savings : 0;
         }
       } catch (err) {
-        // Silent fail on preview - not critical
         console.error("Preview error:", err);
+        this.previewUrls.compressed = null;
+      } finally {
+        this.previewLoading = false;
+      }
+    },
+    closePreview() {
+      this.previewOverlay = false;
+      this.cleanupBlobUrls();
+      this.previewUrls.original = null;
+      this.previewUrls.compressed = null;
+    },
+    openFullscreen(url) {
+      if (url) this.fullscreenUrl = url;
+    },
+    closeFullscreen() {
+      this.fullscreenUrl = null;
+    },
+    cleanupBlobUrls() {
+      if (this.previewUrls.compressed && this.previewUrls.compressed.startsWith('blob:')) {
+        URL.revokeObjectURL(this.previewUrls.compressed);
       }
     },
     confirmCompress() {
@@ -377,23 +429,51 @@ export default {
         // Subscribe to progress
         this.progressSubscription = subscribeProgress(result.taskId, {
           onProgress: (data) => {
-            this.progressData = data;
+            this.progressData = {
+              current: data.processed || 0,
+              total: data.total || 0,
+              currentFile: data.current || null,
+              percent: data.percent || 0,
+              skipped: data.skipped || 0,
+              failed: data.failed || 0,
+            };
           },
           onComplete: (data) => {
             this.compressing = false;
             this.progressData.current = this.progressData.total;
             mutations.setReload(true);
             mutations.closeTopPrompt();
-            notify.showSuccess(
-              this.$t("prompts.compressComplete", {
-                count: data.totalFiles || files.length,
-                saved: this.formatSize(data.totalSaved || 0),
-              })
-            );
+
+            const successCount = data.success || 0;
+            const skippedCount = data.skipped || 0;
+            const failedCount = data.failed || 0;
+
+            if (failedCount > 0 && successCount === 0) {
+              notify.showError(
+                this.$t("prompts.compressFailed", { count: failedCount })
+              );
+            } else {
+              let msgParts = [
+                this.$t("prompts.compressComplete", {
+                  count: successCount,
+                  skipped: skippedCount,
+                })
+              ];
+              if (data.backupPath) {
+                msgParts.push(this.$t("prompts.compressBackupPath", {
+                  path: data.backupPath
+                }));
+                if (data.backupFallback) {
+                  msgParts.push(this.$t("prompts.compressBackupFallback"));
+                }
+              }
+              notify.showSuccess(msgParts.join(" "));
+            }
           },
           onError: (data) => {
             this.compressing = false;
-            notify.showError(data.message || "Compression failed");
+            const message = data.error || data.message || "Compression failed";
+            notify.showError(message);
           },
         });
       } catch (err) {
@@ -701,23 +781,95 @@ export default {
   white-space: nowrap;
 }
 
-/* Zoom Overlay */
-.compress-zoom-overlay {
+/* Preview Mode Toggle */
+.compress-preview-toggle {
+  padding: 0.5em 0;
+}
+
+/* Preview Overlay */
+.compress-preview-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--background);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+.compress-preview-header {
+  padding: 1em;
+  border-bottom: 1px solid var(--divider);
+}
+.compress-preview-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--textPrimary);
+  font-size: 1em;
+}
+.compress-preview-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.compress-preview-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  border-right: 1px solid var(--divider);
+  cursor: pointer;
+}
+.compress-preview-item:last-child {
+  border-right: none;
+}
+.compress-preview-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+.compress-preview-fade-in {
+  animation: compressFadeIn 300ms ease;
+}
+@keyframes compressFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.compress-preview-size {
+  margin-top: 0.5em;
+  font-size: 0.9em;
+  color: var(--textSecondary);
+}
+
+/* Fullscreen Overlay */
+.compress-fullscreen-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #000;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
 }
-
-.compress-zoom-img {
-  max-width: 90vw;
-  max-height: 90vh;
+.compress-fullscreen-img {
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
+}
+.compress-fullscreen-back {
+  position: fixed;
+  bottom: 1em;
+  right: 1em;
+  z-index: 201;
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5em 1em;
+  border-radius: 4px;
 }
 </style>

@@ -355,7 +355,7 @@ export default {
       this.cleanupBlobUrls();
 
       // Get original image URL (instant)
-      this.previewUrls.original = getPreviewURL(file.source, file.path, file.modified);
+      this.previewUrls.original = getPreviewURL(file.source, file.path, file.modified) + '&size=original';
 
       // Reset compressed side
       this.previewUrls.compressed = null;
@@ -828,13 +828,14 @@ export default {
   padding: 1em;
   border-right: 1px solid var(--divider);
   cursor: pointer;
+  min-height: 0;
 }
 .compress-preview-item:last-child {
   border-right: none;
 }
 .compress-preview-img {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 100%;
   object-fit: contain;
 }
 .compress-preview-fade-in {
@@ -845,7 +846,9 @@ export default {
   to { opacity: 1; }
 }
 .compress-preview-size {
+  flex: 0 0 auto;
   margin-top: 0.5em;
+  padding: 0.5em;
   font-size: 0.9em;
   color: var(--textSecondary);
 }

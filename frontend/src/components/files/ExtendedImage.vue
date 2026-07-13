@@ -429,6 +429,29 @@ export default {
     clearCachePool() {
       this.imageCachePool.clear();
     },
+    waitForDecode(imgEl) {
+      // Already decoded? Skip.
+      if (imgEl.complete && imgEl.naturalWidth > 0) {
+        return Promise.resolve();
+      }
+      // decode() available? Use it with 3s timeout.
+      if (typeof imgEl.decode === 'function') {
+        return Promise.race([
+          imgEl.decode(),
+          new Promise((_, reject) => setTimeout(() => reject('timeout'), 3000))
+        ]).catch(() => {});
+      }
+      // Fallback: wait for load event
+      return new Promise((resolve) => {
+        const handler = () => {
+          imgEl.removeEventListener('load', handler);
+          imgEl.removeEventListener('error', handler);
+          resolve();
+        };
+        imgEl.addEventListener('load', handler);
+        imgEl.addEventListener('error', handler);
+      });
+    },
     navigateToImage(newSrc) {
       // Increment generation token to invalidate any stale callbacks
       this.transitionGeneration++;
@@ -444,27 +467,16 @@ export default {
 
       const cleanUrl = String(newSrc).replace(/&amp;/g, '&');
 
-      if (this.imageCachePool.has(newSrc)) {
-        // Cache hit: image was preloaded, browser will fetch from cache
-        inactiveRef.src = cleanUrl;
+      // Set src on inactive buffer (fromRef stays visible underneath)
+      inactiveRef.src = cleanUrl;
+
+      // Wait for decode before calling swapBuffers
+      this.waitForDecode(inactiveRef).then(() => {
+        if (myGen !== this.transitionGeneration) return;  // stale
+        this.imageCachePool.add(newSrc);
+        this.trimCachePool();
         this.swapBuffers(inactiveBuf, inactiveRef, activeRef, myGen);
-      } else {
-        // Cache miss: preload with detached Image, then swap
-        const preloadImg = new Image();
-        preloadImg.onload = () => {
-          if (myGen !== this.transitionGeneration) return;
-          this.imageCachePool.add(newSrc);
-          this.trimCachePool();
-          inactiveRef.src = cleanUrl;
-          this.swapBuffers(inactiveBuf, inactiveRef, activeRef, myGen);
-        };
-        preloadImg.onerror = () => {
-          if (myGen !== this.transitionGeneration) return;
-          this.transitionInProgress = false;
-          this.onImageError({ target: activeRef });
-        };
-        preloadImg.src = cleanUrl;
-      }
+      });
     },
     swapBuffers(toBuf, toRef, fromRef, gen) {
       if (gen !== this.transitionGeneration) return;
@@ -491,13 +503,15 @@ export default {
         fromRef.style.opacity = '1';
         finishTransition();
       } else if (type === 'crossfade') {
+        // Both visible. Simultaneous crossfade: toRef 0->1, fromRef 1->0
         toRef.style.transition = 'opacity 0.3s ease';
         toRef.style.opacity = '0';
         toRef.style.display = 'block';
+        fromRef.style.transition = 'opacity 0.3s ease';
+        fromRef.style.opacity = '1';
         requestAnimationFrame(() => {
           if (gen !== self.transitionGeneration) return;
           toRef.style.opacity = '1';
-          fromRef.style.transition = 'opacity 0.3s ease';
           fromRef.style.opacity = '0';
           setTimeout(() => {
             if (gen !== self.transitionGeneration) return;
@@ -508,25 +522,27 @@ export default {
             finishTransition();
           }, 300);
         });
-      } else if (type === 'fade_to_black') {
-        fromRef.style.transition = 'opacity 0.15s ease';
-        fromRef.style.opacity = '0';
-        setTimeout(() => {
+      } else if (type === 'fade' || type === 'fade_to_black') {
+        // Seamless crossfade with longer duration - NEVER show black
+        var fadeDuration = 500;
+        toRef.style.transition = 'opacity ' + fadeDuration + 'ms ease';
+        toRef.style.opacity = '0';
+        toRef.style.display = 'block';
+        fromRef.style.transition = 'opacity ' + fadeDuration + 'ms ease';
+        fromRef.style.opacity = '1';
+        requestAnimationFrame(() => {
           if (gen !== self.transitionGeneration) return;
-          fromRef.style.display = 'none';
-          toRef.style.opacity = '0';
-          toRef.style.display = 'block';
-          toRef.style.transition = 'opacity 0.15s ease';
-          requestAnimationFrame(() => {
+          toRef.style.opacity = '1';
+          fromRef.style.opacity = '0';
+          setTimeout(() => {
             if (gen !== self.transitionGeneration) return;
-            toRef.style.opacity = '1';
-            setTimeout(() => {
-              if (gen !== self.transitionGeneration) return;
-              toRef.style.transition = 'none';
-              finishTransition();
-            }, 150);
-          });
-        }, 150);
+            fromRef.style.display = 'none';
+            fromRef.style.opacity = '1';
+            fromRef.style.transition = 'none';
+            toRef.style.transition = 'none';
+            finishTransition();
+          }, fadeDuration);
+        });
       } else {
         // Fallback: same as instant
         toRef.style.opacity = '1';
@@ -1122,7 +1138,7 @@ export default {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   max-width: 100%;
   max-height: 100%;
   width: auto;

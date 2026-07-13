@@ -58,14 +58,7 @@
                   type="checkbox"
                   v-model="selectedFiles[file.path]"
                 />
-                <img
-                  v-if="file.thumbnailUrl"
-                  :src="file.thumbnailUrl"
-                  class="compress-file-thumb"
-                  loading="lazy"
-                  alt=""
-                />
-                <i v-else class="material-symbols compress-file-icon">image</i>
+                <i class="material-symbols compress-file-icon">image</i>
                 <span class="compress-file-name">{{ file.name }}</span>
                 <span class="compress-file-size">{{ formatSize(file.size) }}</span>
               </label>

@@ -243,6 +243,7 @@
     "compressOriginal": "原始圖片",
     "compressCompressed": "壓縮後",
     "compressBackup": "建立原始檔案的 ZSTD 備份",
+    "compressScanning": "正在掃描圖片...",
     "compressBackupDescription": "在替換為壓縮版本之前，將原始檔案儲存為 .zst 壓縮備份。",
     "compressBackupName": "備份檔案名稱",
     "compressConfirm": "壓縮 {count} 張圖片？",

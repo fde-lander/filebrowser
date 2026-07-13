@@ -223,7 +223,7 @@
 import { state, mutations } from "@/store";
 import { notify } from "@/notify";
 import { previewCompress, startCompress, pollStatus } from "@/api/compress.js";
-import { getPreviewURL } from "@/api/resources.js";
+import { getPreviewURL, fetchFiles } from "@/api/resources.js";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import ToggleSwitch from "@/components/settings/ToggleSwitch.vue";
 
@@ -256,6 +256,8 @@ export default {
       previewOverlay: false,
       fullscreenUrl: null,
       backupEnabled: true,
+      expandingItems: false,
+      expandedItems: [],
       compressing: false,
       showConfirm: false,
       zoomUrl: null,
@@ -274,7 +276,8 @@ export default {
     },
     groupedFiles() {
       const groups = {};
-      for (const file of this.items) {
+      const items = this.expandedItems.length > 0 ? this.expandedItems : this.items;
+      for (const file of items) {
         const folder = this.getFolder(file.path);
         if (!groups[folder]) groups[folder] = [];
         groups[folder].push(file);
@@ -316,10 +319,8 @@ export default {
     }
     // Read backup preference from store (default ON)
     this.backupEnabled = state.user?.compressBackup ?? true;
-    // Select all files by default
-    for (const item of this.items) {
-      this.selectedFiles[item.path] = true;
-    }
+    // Expand folders to individual image files
+    this.expandItems();
   },
   beforeUnmount() {
     this.cleanupBlobUrls();
@@ -333,6 +334,35 @@ export default {
     },
     onBackupToggle() {
       mutations.updateCurrentUser({ compressBackup: this.backupEnabled });
+    },
+    isCompressableImage(path) {
+      const ext = path.split('.').pop().toLowerCase();
+      return ['jpg', 'jpeg', 'png', 'bmp', 'webp'].includes(ext);
+    },
+    async expandItems() {
+      this.expandingItems = true;
+      const expanded = [];
+      for (const item of this.items) {
+        if (item.isDir || item.type === 'directory') {
+          try {
+            const result = await fetchFiles(item.source, item.path);
+            for (const f of (result.items || [])) {
+              if (!f.isDir && f.type !== 'directory' && this.isCompressableImage(f.path)) {
+                expanded.push(f);
+              }
+            }
+          } catch (e) { /* skip folder on error */ }
+        } else {
+          if (this.isCompressableImage(item.path)) {
+            expanded.push(item);
+          }
+        }
+      }
+      this.expandedItems = expanded;
+      for (const item of expanded) {
+        this.selectedFiles[item.path] = true;
+      }
+      this.expandingItems = false;
     },
     getFolder(path) {
       const parts = path.split("/");

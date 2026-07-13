@@ -243,6 +243,7 @@
     "compressOriginal": "原图",
     "compressCompressed": "压缩后",
     "compressBackup": "创建原始文件的 ZSTD 备份",
+    "compressScanning": "正在扫描图片...",
     "compressBackupDescription": "在替换为压缩版本之前，将原始文件保存为 .zst 压缩备份。",
     "compressBackupName": "备份文件名",
     "compressConfirm": "压缩 {count} 张图片？",

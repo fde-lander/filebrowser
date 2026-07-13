@@ -909,4 +909,14 @@ export default {
   padding: 0.5em 1em;
   border-radius: 4px;
 }
+
+@media (max-width: 768px) {
+  .compress-preview-body { flex-direction: column; }
+  .compress-preview-img { max-height: 35vh; }
+  .compress-tier-buttons { flex-wrap: wrap; }
+  .compress-tier-btn { flex: 1 1 auto; min-width: 80px; }
+  .compress-fullscreen-back { min-width: 44px; min-height: 44px; font-size: 1.5em; }
+  .compress-file-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .compress-queue-bar { font-size: 0.85em; padding: 0.5em; }
+}
 </style>

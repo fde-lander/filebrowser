@@ -107,6 +107,17 @@
   - Docker build: PASS (84MB)
   - Docker save: filebrowser-fde-v1.4.0.4.tar (84MB)
 - Status: READY FOR DEPLOYMENT
+- Deployed + tested by MASTER (2026-07-13)
+- Test feedback recorded: 6 issues for v1.4.0.5
+- v1.4.0.5 plan written: /home/hermes/workspace/filebrowser-fde/docs/v1.4.0.5-next-version-plan.md
+  - Ch1: Transition cache clear note (LOW)
+  - Ch2: Backend background compress system (CRITICAL) - job manager + SSE independent + single instance
+  - Ch3: Backup toggle persistence + default ON (HIGH)
+  - Ch4: Folder file list expansion - frontend directory expansion (HIGH)
+  - Ch5: Preview original image blurry - add &size=original (HIGH)
+  - Ch6: SSE progress accuracy - send after processing + heartbeat + reconnection (HIGH)
+  - Ch7: Summary + priority order + architecture diagram + test checklist
+- Remote main pushed with v1.4.0.5 plan doc
 
 ### Critical Issues for Next Hotfix (v1.4.0.4)
 

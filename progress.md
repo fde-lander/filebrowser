@@ -67,6 +67,47 @@
 **Permission Gate - WORKING ✅**
 - Admin/non-admin/share users all behave correctly
 
+### v1.4.0.4 Hotfix Session (2026-07-13)
+
+**Session Start**
+- New branch: v1.4.0.4-hotfix (from v1.4.0.2-image-viewer-compression @ 3d973404)
+- PWF files updated for Phase 3
+- Brainstorming skill loaded
+- 3 subagents dispatched for deep code research:
+  - Agent 1: compress.go backend - compressPreviewHandler + compressHandler backup + resolveCompressPath
+  - Agent 2: CompressImages.vue frontend - updatePreview() + backupPath/backupName + API response handling
+  - Agent 3: ExtendedImage.vue - swapBuffers() instant branch + decode/onload mechanism
+- Goal: Find exact break points and code-level fix directions before design discussion
+- Status: code research COMPLETE (3/3 agents returned, 423s total)
+- Brainstorming: ALL 5 issues discussed with MASTER, design confirmed
+  - Issue 1 (backup path): 3-level fallback + abort if all fail
+  - Issue 2 (preview handler dir expansion): os.Stat + filepath.Walk first image
+  - Issue 3 (SSE fields): event name fix + field mapping
+  - Issue 4 (preview UI redesign): checkbox toggle + overlay + fullscreen
+  - Issue 5 (transition): decode-first architecture + seamless crossfade all modes
+- Status: design spec writing phase
+- Spec COMPLETED: /home/hermes/.hermes/docs/superpowers/specs/2026-07-13-v1.4.0.4-hotfix-design.md
+  - 8 chapters, 911 lines, 31KB
+  - Covers all 5 issues with exact line numbers, code snippets, verification checklist
+  - Self-review passed: 0 placeholders, 0 contradictions, 0 ambiguities
+- Plan COMPLETED: /home/hermes/.hermes/docs/superpowers/plans/2026-07-13-v1.4.0.4-hotfix-plan.md
+  - 18 tasks, 5 phases, 1429 lines
+- Implementation COMPLETED (18/18 tasks):
+  - Phase 1 (Backend): finishEvent struct + backup path resolve + 3-level fallback + dir expansion (3 commits)
+  - Phase 2 (Frontend API): SSE event name fix + previewCompress blob rewrite (1 commit)
+  - Phase 3 (CompressImages.vue): SSE field mapping + preview UI redesign + methods (1 commit)
+  - Phase 4 (ExtendedImage.vue): decode-first + 3-mode crossfade + CSS fix (1 commit)
+  - Phase 5 (i18n + Profile.vue): new keys + fade option (1 commit)
+- Build COMPLETED:
+  - go build: PASS
+  - go vet: PASS
+  - go mod verify: PASS
+  - JSON validation: 3/3 PASS
+  - Grep sweep: ALL markers correct
+  - Docker build: PASS (84MB)
+  - Docker save: filebrowser-fde-v1.4.0.4.tar (84MB)
+- Status: READY FOR DEPLOYMENT
+
 ### Critical Issues for Next Hotfix (v1.4.0.4)
 
 1. Folder compression 500: compressPreviewHandler lacks directory expansion

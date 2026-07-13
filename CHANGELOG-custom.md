@@ -343,3 +343,116 @@ docker-compose.yaml 中 image 改回 `gtstef/filebrowser:1.4.0-stable`，restart
 - Spec: ~/.hermes/docs/superpowers/specs/2026-07-11-bugfix-permission-design.md
 - Plan: ~/.hermes/docs/superpowers/plans/2026-07-11-bugfix-permission-plan.md
 - PWF: task_plan.md, findings.md, progress.md
+
+---
+
+# v1.4.0.4 - Hotfix: Backup Path + Preview UI + SSE + Transition
+
+**Date:** 2026-07-13
+**Author:** fde-lander
+**Base Version:** v1.4.0-stable
+**Branch:** v1.4.0.4-hotfix
+**Docker Image:** filebrowser-fde:v1.4.0.4 (84MB)
+**Status:** Ready for deployment
+
+---
+
+## 修复内容
+
+### Issue 1: Backup Path Resolution + 3-Level Fallback (CRITICAL)
+
+**问题：** 压缩功能从未成功执行。backupPath 是用户空间路径，后端直接用 filepath.Join 拼接后 os.Create，路径不存在导致失败，backup-first 设计导致整个压缩中止。
+
+**修复：**
+- goroutine 启动前用 resolveCompressPath 解析 backupPath 到真实文件系统路径
+- 3 级退避：同级目录 -> 上一层目录 -> source 根目录
+- 全部失败则中止压缩
+- finishEvent 新增 BackupFallback 字段通知前端
+
+### Issue 2: compressPreviewHandler 目录展开 (CRITICAL)
+
+**问题：** 右键文件夹预览时 500 错误，os.ReadFile 尝试读取目录。
+
+**修复：** 在 resolveCompressPath 后添加 os.Stat + IsDir 检查，目录则 filepath.Walk 取第一张图片做预览。
+
+### Issue 3: SSE Event Name + Field Alignment (HIGH)
+
+**问题：**
+- 后端发 event: finish 但前端监听 "complete" -> onComplete 永不触发
+- progress 字段 current 是文件名但前端用作计数器
+- complete 事件读 data.totalFiles / data.totalSaved 但后端发 success/skipped/failed
+
+**修复：**
+- compress.js: "complete" -> "finish"
+- onProgress: 映射 processed->current, current->currentFile
+- onComplete: 读 success/skipped/failed + backupPath + backupFallback
+- onError: 读 data.error 兼容 data.message
+
+### Issue 4: Preview UI Redesign (HIGH)
+
+**问题：** 后端返回二进制 blob + headers 但前端读 response.json() -> 必定失败。预览从未工作。
+
+**修复：**
+- previewCompress 改为读 response.blob() + headers
+- 新增 checkbox「开启预览模式」
+- 预览模式 ON: 点击文件打开 overlay（左原图 + 右压缩预览 + loading spinner + fade-in）
+- 点击图片 -> 全屏 overlay（黑色背景 + 返回按钮）
+- 原图 URL 用 getPreviewURL() 从 resources.js
+- 压缩图用 blob URL（blob: 协议）+ beforeUnmount cleanup
+- 预览模式 OFF: 正常勾选/取消选择
+
+### Issue 5: Transition decode-first Architecture (MEDIUM)
+
+**问题：** 三种过渡模式都在 toRef 未 decode 完就隐藏 fromRef -> 黑闪。crossfade 300ms 对大图不够，fade_to_black 有 150ms 设计性黑屏。
+
+**修复：**
+- 新增 waitForDecode() helper: decode().then() + 3s 超时 + fallback for old browsers
+- navigateToImage 重写: set src -> waitForDecode -> swapBuffers（统一路径，不再分 cache hit/miss）
+- swapBuffers 三种模式全部改为「decode 完成后同时渐变」-> 永不到黑
+- fade_to_black 改名为 fade（500ms 柔和渐变，不再有黑屏）
+- 保留 fade_to_black 向后兼容
+- CSS transform 冲突修复: translate -> translate3d（恢复 GPU 合成）
+
+## 改动文件清单
+
+1. backend/http/compress.go - finishEvent struct + backup path resolve + 3-level fallback + compressPreviewHandler dir expansion
+2. frontend/src/api/compress.js - SSE event name + previewCompress blob rewrite
+3. frontend/src/components/prompts/CompressImages.vue - SSE handlers + preview UI + overlay + fullscreen + methods
+4. frontend/src/components/files/ExtendedImage.vue - waitForDecode + decode-first navigateToImage + 3-mode swapBuffers + CSS fix
+5. frontend/src/views/settings/Profile.vue - fade transition option
+6. frontend/src/i18n/en.json - new keys
+7. frontend/src/i18n/zh-cn.json - new keys
+8. frontend/src/i18n/zh-tw.json - new keys
+
+## Git Commits
+
+- 0bc9a11d fix: add BackupFallback field to finishEvent struct
+- 468faf8f fix: resolve backup path through resolveCompressPath + 3-level fallback
+- 21fd2cdf fix: add directory expansion to compressPreviewHandler
+- 83841304 fix: align SSE event name + rewrite previewCompress to blob
+- 65f9b84a feat: preview UI redesign - checkbox + overlay + fullscreen + SSE mapping
+- e454b209 fix: decode-first transition architecture - waitForDecode + simultaneous crossfade
+- 04a87848 feat: add i18n keys + fade transition option
+
+## 验证结果
+
+- go build: PASS
+- go vet: PASS
+- go mod verify: PASS
+- JSON validation: 3/3 PASS
+- Grep sweep: ALL markers correct
+- Docker build: PASS (84MB)
+- Docker save: PASS (filebrowser-fde-v1.4.0.4.tar, 84MB)
+
+## 部署方式
+
+1. scp filebrowser-fde-v1.4.0.4.tar user@server:/tmp/
+2. docker load -i /tmp/filebrowser-fde-v1.4.0.4.tar
+3. docker-compose.yaml 中 image 改为 filebrowser-fde:v1.4.0.4
+4. docker compose down && docker compose up -d
+
+## 相关文档
+
+- Spec: ~/.hermes/docs/superpowers/specs/2026-07-13-v1.4.0.4-hotfix-design.md
+- Plan: ~/.hermes/docs/superpowers/plans/2026-07-13-v1.4.0.4-hotfix-plan.md
+- PWF: task_plan.md, findings.md, progress.md

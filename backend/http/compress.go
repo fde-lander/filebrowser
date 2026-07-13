@@ -222,12 +222,7 @@ func compressImage(srcPath string, level string, quality int) compressionResult 
 		return compressionResult{Err: fmt.Errorf("read file: %w", err)}
 	}
 
-	// PNG + low tier: OxiPNG path
-	if format == "png" && level == "low" {
-		return compressWithOxiPNG(srcPath, origData)
-	}
-
-	// All other cases: WebP
+	// All formats and tiers: WebP
 	return compressWithWebP(origData, format, level, quality)
 }
 

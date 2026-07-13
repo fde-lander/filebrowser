@@ -397,6 +397,28 @@ func compressPreviewHandler(w http.ResponseWriter, r *http.Request, d *requestCo
 		return http.StatusInternalServerError, err
 	}
 
+	// If path is a directory, find first image file for preview
+	info, err := os.Stat(realPath)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to stat path: %v", err)
+	}
+	if info.IsDir() {
+		found := false
+		filepath.Walk(realPath, func(walkPath string, walkInfo os.FileInfo, err error) error {
+			if found || err != nil || walkInfo.IsDir() {
+				return nil
+			}
+			if isImageFile(walkPath) {
+				realPath = walkPath
+				found = true
+			}
+			return nil
+		})
+		if !found {
+			return http.StatusBadRequest, fmt.Errorf("no image files found in directory")
+		}
+	}
+
 	// Read original
 	origData, err := os.ReadFile(realPath)
 	if err != nil {

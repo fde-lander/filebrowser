@@ -84,69 +84,15 @@ export async function startCompress(opts) {
 }
 
 /**
- * Subscribe to compression job progress via Server-Sent Events (SSE).
- * Returns an object with the EventSource and a cleanup function.
- * @param {string} taskId - The task ID returned by startCompress
- * @param {Object} handlers
- * @param {function(Object)} [handlers.onProgress] - Called with { current, total, currentFile, compressedSize, originalSize }
- * @param {function(Object)} [handlers.onComplete] - Called with { totalFiles, totalSaved }
- * @param {function(Object)} [handlers.onError] - Called with { message }
- * @returns {{ eventSource: EventSource, close: function() }}
- */
-export function subscribeProgress(taskId, handlers = {}) {
-  if (!taskId) {
-    throw new Error("taskId is required");
-  }
-  const apiPath = getApiPath(`compress-images/progress`, { taskId });
-  const eventSource = new EventSource(apiPath);
-
-  if (handlers.onProgress) {
-    eventSource.addEventListener("progress", (event) => {
-      try {
-        handlers.onProgress(JSON.parse(event.data));
-      } catch (e) {
-        console.error("Error parsing progress SSE:", e);
-      }
-    });
-  }
-
-  if (handlers.onComplete) {
-    eventSource.addEventListener("finish", (event) => {
-      try {
-        handlers.onComplete(JSON.parse(event.data));
-      } catch (e) {
-        console.error("Error parsing complete SSE:", e);
-      }
-      eventSource.close();
-    });
-  }
-
-  if (handlers.onError) {
-    eventSource.addEventListener("error", (event) => {
-      // Check if this is a data error event (from the server) or a connection error
-      if (event.data) {
-        try {
-          handlers.onError(JSON.parse(event.data));
-        } catch (e) {
-          handlers.onError({ message: "Compression job failed" });
-        }
-      }
-      eventSource.close();
-    });
-  }
-
-  // Handle raw EventSource connection errors (network failures)
-  eventSource.onerror = () => {
-    if (handlers.onError) {
-      handlers.onError({ message: "Connection lost to compression progress stream" });
-    }
-    eventSource.close();
-  };
-
-  return {
-    eventSource,
-    close() {
-      eventSource.close();
-    },
-  };
-}
+ /**
+  * Poll compression queue status via HTTP GET.
+  * @returns {Promise<Object>} Queue status: { status, currentFile, processed, total, ... }
+  */
+ export async function pollStatus() {
+   const apiPath = getApiPath("compress-images/status", {});
+   const response = await fetchURL(apiPath, {});
+   if (!response.ok) {
+     throw new Error(`Status API returned ${response.status}`);
+   }
+   return response.json();
+ }

@@ -48,28 +48,6 @@ type compressResponse struct {
 	Message string `json:"message"`
 }
 
-type progressEvent struct {
-	Current   string `json:"current"`
-	Processed int    `json:"processed"`
-	Total     int    `json:"total"`
-	Percent   int    `json:"percent"`
-	Skipped   int    `json:"skipped"`
-	Failed    int    `json:"failed"`
-}
-
-type finishEvent struct {
-	Success        int    `json:"success"`
-	Skipped        int    `json:"skipped"`
-	Failed         int    `json:"failed"`
-	BackupPath     string `json:"backupPath"`
-	BackupFallback bool   `json:"backupFallback"`
-}
-
-type errorEvent struct {
-	File  string `json:"file"`
-	Error string `json:"error"`
-}
-
 // --- Compression Result ---
 
 type compressionResult struct {
@@ -79,80 +57,114 @@ type compressionResult struct {
 	Err     error
 }
 
-// --- Progress Manager (for SSE) ---
+// --- Queue System ---
 
-type progressManager struct {
-	mu     sync.Mutex
-	chans  map[string]chan progressEvent
-	dones  map[string]chan finishEvent
-	errors map[string]chan errorEvent
+type QueueItem struct {
+	ID          string    `json:"id"`
+	Files       []string  `json:"files"`
+	Level       string    `json:"level"`
+	Quality     int       `json:"quality"`
+	Source      string    `json:"source"`
+	Backup      bool      `json:"backup"`
+	BackupPath  string    `json:"backupPath"`
+	BackupName  string    `json:"backupName"`
+	SourceRoot  string    `json:"-"`
+	Status      string    `json:"status"`
+	AddedAt     time.Time `json:"addedAt"`
 }
 
-var progressMgr = &progressManager{
-	chans:  make(map[string]chan progressEvent),
-	dones:  make(map[string]chan finishEvent),
-	errors: make(map[string]chan errorEvent),
+type CompressJobStatus struct {
+	Status         string      `json:"status"`
+	CurrentFile    string      `json:"currentFile"`
+	Processed      int         `json:"processed"`
+	Total          int         `json:"total"`
+	Skipped        int         `json:"skipped"`
+	Failed         int         `json:"failed"`
+	SavedBytes     int64       `json:"savedBytes"`
+	BackupPath     string      `json:"backupPath"`
+	BackupFallback  bool        `json:"backupFallback"`
+	QueueLength    int         `json:"queueLength"`
+	Queue          []QueueItem `json:"queue"`
 }
 
-func (pm *progressManager) createTask(taskID string) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	pm.chans[taskID] = make(chan progressEvent, 100)
-	pm.dones[taskID] = make(chan finishEvent, 1)
-	pm.errors[taskID] = make(chan errorEvent, 100)
+type compressQueueManager struct {
+	mu           sync.RWMutex
+	queue        []QueueItem
+	current      *QueueItem
+	status       CompressJobStatus
+	workerActive bool
 }
 
-func (pm *progressManager) closeTask(taskID string) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	if ch, ok := pm.chans[taskID]; ok {
-		close(ch)
-		delete(pm.chans, taskID)
+var queueMgr = &compressQueueManager{}
+
+func (qm *compressQueueManager) enqueue(item QueueItem) int {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.queue = append(qm.queue, item)
+	qm.status.QueueLength = len(qm.queue)
+	qm.status.Queue = qm.queue
+	return len(qm.queue)
+}
+
+func (qm *compressQueueManager) dequeue() *QueueItem {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	if len(qm.queue) == 0 {
+		return nil
 	}
-	if ch, ok := pm.dones[taskID]; ok {
-		close(ch)
-		delete(pm.dones, taskID)
-	}
-	if ch, ok := pm.errors[taskID]; ok {
-		close(ch)
-		delete(pm.errors, taskID)
-	}
+	item := qm.queue[0]
+	qm.queue = qm.queue[1:]
+	qm.current = &item
+	qm.status.CurrentFile = ""
+	qm.status.Processed = 0
+	qm.status.Total = len(item.Files)
+	qm.status.Skipped = 0
+	qm.status.Failed = 0
+	qm.status.SavedBytes = 0
+	qm.status.Status = "running"
+	qm.status.QueueLength = len(qm.queue)
+	qm.status.Queue = qm.queue
+	return &item
 }
 
-func (pm *progressManager) sendProgress(taskID string, evt progressEvent) {
-	pm.mu.Lock()
-	ch, ok := pm.chans[taskID]
-	pm.mu.Unlock()
-	if ok {
-		select {
-		case ch <- evt:
-		default: // drop if buffer full
-		}
+func (qm *compressQueueManager) updateProgress(current string, processed, skipped, failed int) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.status.CurrentFile = current
+	qm.status.Processed = processed
+	qm.status.Skipped = skipped
+	qm.status.Failed = failed
+}
+
+func (qm *compressQueueManager) finishCurrent(savedBytes int64, backupPath string, backupFallback bool) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.status.Status = "completed"
+	qm.status.SavedBytes = savedBytes
+	qm.status.BackupPath = backupPath
+	qm.status.BackupFallback = backupFallback
+	qm.current = nil
+}
+
+func (qm *compressQueueManager) getStatus() CompressJobStatus {
+	qm.mu.RLock()
+	defer qm.mu.RUnlock()
+	return qm.status
+}
+
+func (qm *compressQueueManager) isWorkerActive() bool {
+	qm.mu.RLock()
+	defer qm.mu.RUnlock()
+	return qm.workerActive
+}
+
+func (qm *compressQueueManager) setWorkerActive(active bool) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.workerActive = active
+	if !active && len(qm.queue) == 0 {
+		qm.status.Status = "idle"
 	}
-}
-
-func (pm *progressManager) sendFinish(taskID string, evt finishEvent) {
-	pm.mu.Lock()
-	ch, ok := pm.dones[taskID]
-	pm.mu.Unlock()
-	if ok {
-		select {
-		case ch <- evt:
-		default:
-		}
-	}
-}
-
-func (pm *progressManager) getProgressChan(taskID string) chan progressEvent {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	return pm.chans[taskID]
-}
-
-func (pm *progressManager) getDoneChan(taskID string) chan finishEvent {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	return pm.dones[taskID]
 }
 
 // --- Encoder Selection ---
@@ -534,6 +546,21 @@ func addSingleFileToTar(tw *tar.Writer, filePath string) error {
 // @Accept json
 // @Produce json
 // @Param body body compressRequest true "Compress request"
+// @Router /api/compress-images/status [get]
+func compressStatusHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required for image compression")
+	}
+	status := queueMgr.getStatus()
+	return renderJSON(w, r, status)
+}
+
+// @Summary Compress images
+// @Description Start batch image compression with optional ZSTD backup
+// @Tags compress
+// @Accept json
+// @Produce json
+// @Param body body compressRequest true "Compress request"
 // @Router /api/compress-images [post]
 func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
 	if !d.user.Permissions.Admin {
@@ -592,64 +619,84 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 		sourceRootPath, _ = resolveCompressPath(req.Source, "/", d)
 	}
 
-	taskID := fmt.Sprintf("compress-%d", time.Now().UnixNano())
-	progressMgr.createTask(taskID)
+	// Create queue item and enqueue
+	item := QueueItem{
+		ID:         fmt.Sprintf("compress-%d", time.Now().UnixNano()),
+		Files:      realPaths,
+		Level:      req.Level,
+		Quality:    req.Quality,
+		Source:     req.Source,
+		Backup:     req.Backup,
+		BackupPath: realBackupPath,
+		BackupName: req.BackupName,
+		SourceRoot: sourceRootPath,
+		Status:     "queued",
+		AddedAt:    time.Now(),
+	}
+	queuePos := queueMgr.enqueue(item)
 
-	// Run in background
-	go func() {
-		defer progressMgr.closeTask(taskID)
+	// Start worker if idle
+	if !queueMgr.isWorkerActive() {
+		go compressWorker()
+	}
+
+	// Return queue position immediately
+	return renderJSON(w, r, map[string]interface{}{
+		"taskId":  item.ID,
+		"message": "Compression queued",
+		"queuePosition": queuePos,
+	})
+}
+
+// compressWorker processes queue items one at a time
+func compressWorker() {
+	queueMgr.setWorkerActive(true)
+	defer queueMgr.setWorkerActive(false)
+
+	for {
+		item := queueMgr.dequeue()
+		if item == nil {
+			return
+		}
 
 		backupPathDisplay := ""
 		backupFallback := false
+		var totalSavedBytes int64 = 0
+
 		// Step 1: ZSTD backup with 3-level fallback
-		if req.Backup {
-			// Level 1: same-level directory (original backupPath)
-			realBackupFull := filepath.Join(realBackupPath, req.BackupName)
-			err := createBackup(realPaths, realBackupFull)
+		if item.Backup {
+			realBackupFull := filepath.Join(item.BackupPath, item.BackupName)
+			err := createBackup(item.Files, realBackupFull)
 
 			if err != nil {
-				// Level 2: try parent directory
-				parentDir := filepath.Dir(realBackupPath)
-				realBackupFull = filepath.Join(parentDir, req.BackupName)
-				err = createBackup(realPaths, realBackupFull)
+				parentDir := filepath.Dir(item.BackupPath)
+				realBackupFull = filepath.Join(parentDir, item.BackupName)
+				err = createBackup(item.Files, realBackupFull)
 				backupFallback = true
 			}
 
-			if err != nil && sourceRootPath != "" {
-				// Level 3: try source root
-				realBackupFull = filepath.Join(sourceRootPath, req.BackupName)
-				err = createBackup(realPaths, realBackupFull)
+			if err != nil && item.SourceRoot != "" {
+				realBackupFull = filepath.Join(item.SourceRoot, item.BackupName)
+				err = createBackup(item.Files, realBackupFull)
 				backupFallback = true
 			}
 
 			if err != nil {
-				// All 3 levels failed - abort compression
 				logger.Errorf("compress: backup failed at all levels: %v", err)
-				progressMgr.sendFinish(taskID, finishEvent{
-					Failed:     len(realPaths),
-					BackupPath: "",
-				})
-				return
+				queueMgr.finishCurrent(0, "", false)
+				continue
 			}
 
-			backupPathDisplay = filepath.Join(req.BackupPath, req.BackupName)
+			backupPathDisplay = filepath.Join(item.BackupPath, item.BackupName)
 		}
 
 		// Step 2: Serial compression
 		success, skipped, failed := 0, 0, 0
-		total := len(realPaths)
 
-		for i, filePath := range realPaths {
-			progressMgr.sendProgress(taskID, progressEvent{
-				Current:   filepath.Base(filePath),
-				Processed: i,
-				Total:     total,
-				Percent:   int(float64(i) / float64(total) * 100),
-				Skipped:   skipped,
-				Failed:    failed,
-			})
+		for i, filePath := range item.Files {
+			queueMgr.updateProgress(filepath.Base(filePath), i, skipped, failed)
 
-			result := compressImage(filePath, req.Level, req.Quality)
+			result := compressImage(filePath, item.Level, item.Quality)
 			if result.Err != nil {
 				failed++
 				continue
@@ -667,6 +714,16 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 				continue
 			}
 
+			// Track saved bytes
+			origInfo, _ := os.Stat(filePath)
+			newInfo, _ := os.Stat(newPath)
+			if origInfo != nil && newInfo != nil {
+				saved := origInfo.Size() - newInfo.Size()
+				if saved > 0 {
+					totalSavedBytes += saved
+				}
+			}
+
 			// Remove original if path changed
 			if newPath != filePath {
 				os.Remove(filePath)
@@ -674,21 +731,8 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 			success++
 		}
 
-		// Send finish event
-		progressMgr.sendFinish(taskID, finishEvent{
-			Success:        success,
-			Skipped:        skipped,
-			Failed:         failed,
-			BackupPath:     backupPathDisplay,
-			BackupFallback: backupFallback,
-		})
-	}()
-
-	// Return task ID immediately
-	return renderJSON(w, r, compressResponse{
-		TaskID:  taskID,
-		Message: "Compression started",
-	})
+		queueMgr.finishCurrent(totalSavedBytes, backupPathDisplay, backupFallback)
+	}
 }
 
 func getCompressedPath(origPath string, format string) string {
@@ -701,57 +745,6 @@ func getCompressedPath(origPath string, format string) string {
 		return origPath + ".webp"
 	}
 	return origPath[:len(origPath)-len(ext)] + ".webp"
-}
-
-// --- SSE Progress Handler ---
-
-// @Summary Compress progress stream
-// @Description Server-Sent Events stream for compression progress
-// @Tags compress
-// @Param taskId query string true "Task ID"
-// @Router /api/compress-images/progress [get]
-func compressProgressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
-	if !d.user.Permissions.Admin {
-		return http.StatusForbidden, fmt.Errorf("admin permission required for image compression")
-	}
-	taskID := r.URL.Query().Get("taskId")
-	if taskID == "" {
-		return http.StatusBadRequest, fmt.Errorf("missing taskId")
-	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return http.StatusInternalServerError, fmt.Errorf("streaming not supported")
-	}
-
-	ctx := r.Context()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return 0, nil
-		case evt, ok := <-progressMgr.getProgressChan(taskID):
-			if !ok {
-				return 0, nil
-			}
-			data, _ := json.Marshal(evt)
-			fmt.Fprintf(w, "event: progress\ndata: %s\n\n", data)
-			flusher.Flush()
-		case evt, ok := <-progressMgr.getDoneChan(taskID):
-			if !ok {
-				return 0, nil
-			}
-			data, _ := json.Marshal(evt)
-			fmt.Fprintf(w, "event: finish\ndata: %s\n\n", data)
-			flusher.Flush()
-			return 0, nil
-		}
-	}
 }
 
 // --- Helpers ---

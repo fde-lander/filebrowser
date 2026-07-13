@@ -221,7 +221,7 @@
 <script>
 import { mutations } from "@/store";
 import { notify } from "@/notify";
-import { previewCompress, startCompress, subscribeProgress } from "@/api/compress.js";
+import { previewCompress, startCompress, pollStatus } from "@/api/compress.js";
 import { getPreviewURL } from "@/api/resources.js";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import ToggleSwitch from "@/components/settings/ToggleSwitch.vue";
@@ -261,7 +261,7 @@ export default {
       progressData: { current: 0, total: 0, currentFile: null },
       selectedFiles: {},
       collapsedGroups: {},
-      progressSubscription: null,
+      pollTimer: null,
     };
   },
   computed: {
@@ -320,8 +320,8 @@ export default {
   },
   beforeUnmount() {
     this.cleanupBlobUrls();
-    if (this.progressSubscription) {
-      this.progressSubscription.close();
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
     }
   },
   methods: {
@@ -426,56 +426,61 @@ export default {
           backupPath: this.backupPath,
           backupName: this.backupFileName,
         });
-        // Subscribe to progress
-        this.progressSubscription = subscribeProgress(result.taskId, {
-          onProgress: (data) => {
-            this.progressData = {
-              current: data.processed || 0,
-              total: data.total || 0,
-              currentFile: data.current || null,
-              percent: data.percent || 0,
-              skipped: data.skipped || 0,
-              failed: data.failed || 0,
-            };
-          },
-          onComplete: (data) => {
-            this.compressing = false;
-            this.progressData.current = this.progressData.total;
-            mutations.setReload(true);
-            mutations.closeTopPrompt();
 
-            const successCount = data.success || 0;
-            const skippedCount = data.skipped || 0;
-            const failedCount = data.failed || 0;
+        // Start polling for status
+        this.pollTimer = setInterval(async () => {
+          try {
+            const status = await pollStatus();
+            if (status.status === "running") {
+              this.progressData = {
+                current: status.processed || 0,
+                total: status.total || 0,
+                currentFile: status.currentFile || null,
+              };
+            } else if (status.status === "completed") {
+              clearInterval(this.pollTimer);
+              this.pollTimer = null;
+              this.compressing = false;
+              this.progressData.current = this.progressData.total;
+              mutations.setReload(true);
+              mutations.closeTopPrompt();
 
-            if (failedCount > 0 && successCount === 0) {
-              notify.showError(
-                this.$t("prompts.compressFailed", { count: failedCount })
-              );
-            } else {
-              let msgParts = [
-                this.$t("prompts.compressComplete", {
-                  count: successCount,
-                  skipped: skippedCount,
-                })
-              ];
-              if (data.backupPath) {
-                msgParts.push(this.$t("prompts.compressBackupPath", {
-                  path: data.backupPath
-                }));
-                if (data.backupFallback) {
-                  msgParts.push(this.$t("prompts.compressBackupFallback"));
+              const savedStr = this.formatSize(status.savedBytes || 0);
+              const successCount = status.processed - (status.skipped || 0) - (status.failed || 0);
+              const failedCount = status.failed || 0;
+
+              if (failedCount > 0 && successCount <= 0) {
+                notify.showError(
+                  this.$t("prompts.compressFailed", { count: failedCount })
+                );
+              } else {
+                let msgParts = [
+                  this.$t("prompts.compressComplete", {
+                    count: successCount,
+                    saved: savedStr,
+                  })
+                ];
+                if (status.backupPath) {
+                  msgParts.push(this.$t("prompts.compressBackupPath", {
+                    path: status.backupPath
+                  }));
+                  if (status.backupFallback) {
+                    msgParts.push(this.$t("prompts.compressBackupFallback"));
+                  }
                 }
+                notify.showSuccess(msgParts.join(" "));
               }
-              notify.showSuccess(msgParts.join(" "));
+            } else if (status.status === "failed") {
+              clearInterval(this.pollTimer);
+              this.pollTimer = null;
+              this.compressing = false;
+              notify.showError(this.$t("prompts.compressFailed", { count: status.failed }));
             }
-          },
-          onError: (data) => {
-            this.compressing = false;
-            const message = data.error || data.message || "Compression failed";
-            notify.showError(message);
-          },
-        });
+          } catch (err) {
+            console.error("Status poll error:", err);
+            // Keep polling - network error doesn't mean backend failed
+          }
+        }, 3000);
       } catch (err) {
         this.compressing = false;
         console.error(err);

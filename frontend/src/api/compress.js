@@ -4,13 +4,13 @@ import { fetchURL } from "./utils";
 
 /**
  * Preview image compression for a single file without applying it.
- * Returns estimated compressed size and a preview thumbnail URL.
+ * Returns compressed image as binary blob + size info from headers.
  * @param {Object} opts
  * @param {string} opts.source - Source name where the file lives
  * @param {string} opts.path - File path
  * @param {string} opts.level - Compression level: "low" | "medium" | "high"
  * @param {number} [opts.quality] - Quality value (1-100), overrides level default
- * @returns {Promise<Object>} { originalSize, compressedSize, previewUrl }
+ * @returns {Promise<Object>} { blob, originalSize, compressedSize, skipped, contentType }
  */
 export async function previewCompress(opts) {
   const { source, path, level, quality } = opts;
@@ -30,7 +30,13 @@ export async function previewCompress(opts) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return response.json();
+    // Backend returns binary blob + headers, NOT JSON
+    const blob = await response.blob();
+    const originalSize = parseInt(response.headers.get("X-Original-Size") || "0", 10);
+    const compressedSize = parseInt(response.headers.get("X-Compressed-Size") || "0", 10);
+    const skipped = response.headers.get("X-Skipped") === "true";
+    const contentType = response.headers.get("Content-Type") || "image/webp";
+    return { blob, originalSize, compressedSize, skipped, contentType };
   } catch (err) {
     notify.showError(err.message || "Error previewing compression");
     throw err;
@@ -105,7 +111,7 @@ export function subscribeProgress(taskId, handlers = {}) {
   }
 
   if (handlers.onComplete) {
-    eventSource.addEventListener("complete", (event) => {
+    eventSource.addEventListener("finish", (event) => {
       try {
         handlers.onComplete(JSON.parse(event.data));
       } catch (e) {

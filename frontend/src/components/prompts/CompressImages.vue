@@ -265,7 +265,8 @@ export default {
       return Object.values(this.selectedFiles).filter(Boolean).length;
     },
     selectedFileList() {
-      return this.items.filter((item) => this.selectedFiles[item.path]);
+      const items = this.expandedItems.length > 0 ? this.expandedItems : this.items;
+      return items.filter((item) => this.selectedFiles[item.path]);
     },
     groupedFiles() {
       const groups = {};

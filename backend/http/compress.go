@@ -163,7 +163,13 @@ func (qm *compressQueueManager) setWorkerActive(active bool) {
 	defer qm.mu.Unlock()
 	qm.workerActive = active
 	if !active && len(qm.queue) == 0 {
-		qm.status.Status = "idle"
+		// Do NOT overwrite "completed" status with "idle"
+		// Frontend polls every 3s; it needs to catch "completed"
+		// before we reset. Only set "idle" if status is still "running"
+		// (e.g. backup failure path that skipped finishCurrent)
+		if qm.status.Status == "running" {
+			qm.status.Status = "idle"
+		}
 	}
 }
 

@@ -29,7 +29,6 @@
       v-if="!isTiff"
       class="image-ex-img image-buffer-b"
       ref="imgB"
-      @load="onLoad"
       @error="onImageError"
       :style="bufferBStyle"
     />
@@ -245,7 +244,7 @@ export default {
       return state.user?.imageTapNav !== false; // default true
     },
     transitionType() {
-      return state.user?.imageTransition || 'fade'; // default fade (soft)
+      return state.user?.imageTransition || 'crossfade'; // default crossfade
     },
     // Returns the currently active image DOM element (imgA, imgB, or imgex for TIFF)
     activeImgEl() {
@@ -385,9 +384,6 @@ export default {
         }
       }
       
-      // During transition: do not force display broken image icon
-      if (this.transitionInProgress) return;
-      
       this.imageLoaded = true;
       this.fullImageLoaded = true;
       mutations.setLoading("preview-img", false);
@@ -443,7 +439,7 @@ export default {
         return Promise.race([
           imgEl.decode(),
           new Promise((_, reject) => setTimeout(() => reject('timeout'), 3000))
-        ]);
+        ]).catch(() => {});
       }
       // Fallback: wait for load event
       return new Promise((resolve) => {
@@ -480,12 +476,6 @@ export default {
         this.imageCachePool.add(newSrc);
         this.trimCachePool();
         this.swapBuffers(inactiveBuf, inactiveRef, activeRef, myGen);
-      }).catch(() => {
-        // Decode failed - abort transition, keep old image visible
-        if (myGen !== this.transitionGeneration) return;
-        this.transitionInProgress = false;
-        mutations.setLoading("preview-img", false);
-        mutations.setNavigationTransitioning(false);
       });
     },
     swapBuffers(toBuf, toRef, fromRef, gen) {
@@ -497,16 +487,9 @@ export default {
       function finishTransition() {
         if (gen !== self.transitionGeneration) return;
         self.activeBuffer = toBuf;
-        // Clear old buffer src to prevent stale bitmap on next navigation
-        if (fromRef) {
-          fromRef.removeAttribute('src');
-        }
         self.transitionInProgress = false;
-        // Verify the new image actually loaded successfully
-        if (toRef.complete && toRef.naturalWidth > 0) {
-          self.fullImageLoaded = true;
-          self.imageLoaded = true;
-        }
+        self.fullImageLoaded = true;
+        self.imageLoaded = true;
         mutations.setLoading("preview-img", false);
         mutations.setNavigationTransitioning(false);
         self.scheduleSetCenter();

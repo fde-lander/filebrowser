@@ -357,7 +357,7 @@ export default {
       this.localuser.navButtonOpacity = 1.0;
     }
     if (!this.localuser.imageTransition) {
-      this.localuser.imageTransition = 'fade';
+      this.localuser.imageTransition = 'crossfade';
     }
     if (typeof this.localuser.imagePreload !== 'boolean') {
       this.localuser.imagePreload = true;
@@ -450,7 +450,6 @@ export default {
           "hideFileExt",
           "deleteWithoutConfirming",
           "deleteAfterArchive",
-          "compressBackup",
           "preview",
           "disableQuickToggles",
           "disableSearchOptions",

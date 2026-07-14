@@ -309,74 +309,12 @@ export default {
   mounted() {
     // Defensive guard: items may not be passed
     if (!this.items || !Array.isArray(this.items) || this.items.length === 0) {
-      // Even with no items, still check if backend has an active job
-      this.recoverQueueStatus();
       return;
     }
     // Read backup preference from store (default ON)
     this.backupEnabled = state.user?.compressBackup ?? true;
     // Expand folders to individual image files
     this.expandItems();
-    // Check if backend is already running a job (dialog reopened)
-    this.recoverQueueStatus();
-  },
-  async recoverQueueStatus() {
-    try {
-      const status = await pollStatus();
-      if (status.status === "running" || status.status === "completed") {
-        // Backend has active or just-finished job - show progress UI
-        this.compressing = true;
-        this.progressData = {
-          current: status.processed || 0,
-          total: status.total || 0,
-          currentFile: status.currentFile || null,
-        };
-        // Start polling to track completion
-        this.pollTimer = setInterval(async () => {
-          try {
-            const s = await pollStatus();
-            if (s.status === "running") {
-              this.progressData = {
-                current: s.processed || 0,
-                total: s.total || 0,
-                currentFile: s.currentFile || null,
-              };
-            } else if (s.status === "completed") {
-              clearInterval(this.pollTimer);
-              this.pollTimer = null;
-              this.compressing = false;
-              this.progressData.current = this.progressData.total;
-              mutations.setReload(true);
-              mutations.closeTopPrompt();
-              const savedStr = this.formatSize(s.savedBytes || 0);
-              const successCount = s.processed - (s.skipped || 0) - (s.failed || 0);
-              if ((s.failed || 0) > 0 && successCount <= 0) {
-                notify.showError(this.$t("prompts.compressFailed", { count: s.failed }));
-              } else {
-                notify.showSuccess(
-                  this.$t("prompts.compressComplete", { count: successCount, saved: savedStr })
-                );
-                if (s.backupPath) {
-                  notify.showSuccess(this.$t("prompts.compressBackupPath", { path: s.backupPath }));
-                  if (s.backupFallback) {
-                    notify.showInfo(this.$t("prompts.compressBackupFallback"));
-                  }
-                }
-              }
-            } else if (s.status === "idle") {
-              // Job finished and status was reset to idle
-              clearInterval(this.pollTimer);
-              this.pollTimer = null;
-              this.compressing = false;
-            }
-          } catch (err) {
-            console.error("Status poll error:", err);
-          }
-        }, 3000);
-      }
-    } catch (err) {
-      // Backend unavailable or no active job - normal state
-    }
   },
   beforeUnmount() {
     this.cleanupBlobUrls();

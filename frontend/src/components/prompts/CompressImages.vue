@@ -67,6 +67,14 @@
         </div>
       </div>
 
+      <!-- Preview mode toggle (moved from below Advanced Settings per v1.4.0.5-fde plan) -->
+      <div class="compress-preview-toggle">
+        <label>
+          <input type="checkbox" v-model="previewMode" />
+          {{ $t("prompts.compressPreviewToggle") }}
+        </label>
+      </div>
+
       <!-- Tier Selection -->
       <div class="compress-tier-section">
         <p class="prompts-label">{{ $t("prompts.compressQuality") }}</p>
@@ -121,14 +129,6 @@
           />
           <span class="compress-quality-range">{{ qualityRange.min }} - {{ qualityRange.max }}</span>
         </div>
-      </div>
-
-      <!-- Preview mode toggle -->
-      <div class="compress-preview-toggle">
-        <label>
-          <input type="checkbox" v-model="previewMode" />
-          {{ $t("prompts.compressPreviewToggle") }}
-        </label>
       </div>
 
       <!-- Options -->
@@ -663,14 +663,6 @@ export default {
   background: var(--surfacePrimaryAlt);
 }
 
-.compress-file-thumb {
-  width: 32px;
-  height: 32px;
-  object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
 .compress-file-icon {
   font-size: 24px;
   color: var(--textSecondary);
@@ -749,7 +741,14 @@ export default {
   color: var(--textSecondary);
 }
 
-/* Preview */
+/* Preview
+ * NOTE: The two CSS blocks below (.compress-preview-section, .compress-preview-container,
+ * AND the first .compress-preview-item/.compress-preview-img/.compress-preview-size)
+ * are LEGACY from v1.4.0.4 inline preview UI. They are NOT used in the current
+ * template (which uses the Overlay-based preview at L~830+). Per MASTER directive
+ * (2026-07-14): keep these for now, only annotate. Do NOT delete unless confirmed
+ * they don't affect any user-visible functionality.
+ */
 .compress-preview-section {
   margin-top: 1em;
 }
@@ -883,7 +882,7 @@ export default {
   padding: 0.5em 0;
 }
 
-/* Preview Overlay */
+/* Preview Overlay (ACTIVE — used by template at L150+) */
 .compress-preview-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;

@@ -913,6 +913,9 @@ export default {
 @media (max-width: 768px) {
   .compress-preview-body { flex-direction: column; }
   .compress-preview-img { max-height: 35vh; }
+  .compress-preview-overlay { flex-direction: column !important; overflow-y: auto; }
+  .compress-preview-item { max-height: 30vh !important; }
+  .compress-preview-section { flex-direction: column !important; }
   .compress-tier-buttons { flex-wrap: wrap; }
   .compress-tier-btn { flex: 1 1 auto; min-width: 80px; }
   .compress-fullscreen-back { min-width: 44px; min-height: 44px; font-size: 1.5em; }

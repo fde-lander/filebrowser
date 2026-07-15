@@ -85,6 +85,15 @@ type CompressJobStatus struct {
 	BackupFallback  bool        `json:"backupFallback"`
 	QueueLength    int         `json:"queueLength"`
 	Queue          []QueueItem `json:"queue"`
+	// Cumulative stats across all batches (v1.4.0.6)
+	TotalFiles        int        `json:"totalFiles"`
+	TotalProcessed    int        `json:"totalProcessed"`
+	TotalSkipped      int        `json:"totalSkipped"`
+	TotalFailed       int        `json:"totalFailed"`
+	BatchCount        int        `json:"batchCount"`
+	CurrentBatchIndex int        `json:"currentBatchIndex"`
+	CurrentBatchTotal int        `json:"currentBatchTotal"`
+	PausedAt          *time.Time `json:"pausedAt,omitempty"`
 }
 
 type compressQueueManager struct {
@@ -93,16 +102,37 @@ type compressQueueManager struct {
 	current      *QueueItem
 	status       CompressJobStatus
 	workerActive bool
+	// Control flags (v1.4.0.6)
+	paused             bool
+	cancelRequested    bool
+	skipBatchRequested bool
+	cond               *sync.Cond
+	pauseTimeoutMinutes int
+	// Cumulative tracking (v1.4.0.6)
+	totalFiles        int
+	totalProcessed    int
+	totalSkipped     int
+	totalFailed      int
+	batchCount        int
+	currentBatchIndex int
+	pausedAt          *time.Time
 }
 
-var queueMgr = &compressQueueManager{}
+var queueMgr = &compressQueueManager{
+	cond:                sync.NewCond(&sync.Mutex{}),
+	pauseTimeoutMinutes: 30,
+}
 
 func (qm *compressQueueManager) enqueue(item QueueItem) int {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 	qm.queue = append(qm.queue, item)
+	qm.batchCount++
+	qm.totalFiles += len(item.Files)
 	qm.status.QueueLength = len(qm.queue)
 	qm.status.Queue = qm.queue
+	qm.status.TotalFiles = qm.totalFiles
+	qm.status.BatchCount = qm.batchCount
 	return len(qm.queue)
 }
 
@@ -115,6 +145,7 @@ func (qm *compressQueueManager) dequeue() *QueueItem {
 	item := qm.queue[0]
 	qm.queue = qm.queue[1:]
 	qm.current = &item
+	qm.currentBatchIndex++
 	qm.status.CurrentFile = ""
 	qm.status.Processed = 0
 	qm.status.Total = len(item.Files)
@@ -124,16 +155,26 @@ func (qm *compressQueueManager) dequeue() *QueueItem {
 	qm.status.Status = "running"
 	qm.status.QueueLength = len(qm.queue)
 	qm.status.Queue = qm.queue
+	qm.status.CurrentBatchIndex = qm.currentBatchIndex
+	qm.status.CurrentBatchTotal = len(item.Files)
+	qm.status.TotalFiles = qm.totalFiles
+	qm.status.BatchCount = qm.batchCount
 	return &item
 }
 
 func (qm *compressQueueManager) updateProgress(current string, processed, skipped, failed int) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	qm.totalProcessed = qm.totalProcessed - qm.status.Processed + processed
+	qm.totalSkipped = qm.totalSkipped - qm.status.Skipped + skipped
+	qm.totalFailed = qm.totalFailed - qm.status.Failed + failed
 	qm.status.CurrentFile = current
 	qm.status.Processed = processed
 	qm.status.Skipped = skipped
 	qm.status.Failed = failed
+	qm.status.TotalProcessed = qm.totalProcessed
+	qm.status.TotalSkipped = qm.totalSkipped
+	qm.status.TotalFailed = qm.totalFailed
 }
 
 func (qm *compressQueueManager) finishCurrent(savedBytes int64, backupPath string, backupFallback bool) {
@@ -143,12 +184,20 @@ func (qm *compressQueueManager) finishCurrent(savedBytes int64, backupPath strin
 	qm.status.SavedBytes = savedBytes
 	qm.status.BackupPath = backupPath
 	qm.status.BackupFallback = backupFallback
+	// Cumulative totals already maintained by updateProgress delta tracking
+	qm.status.TotalProcessed = qm.totalProcessed
+	qm.status.TotalSkipped = qm.totalSkipped
+	qm.status.TotalFailed = qm.totalFailed
 	qm.current = nil
 }
 
 func (qm *compressQueueManager) getStatus() CompressJobStatus {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
+	qm.status.TotalFiles = qm.totalFiles
+	qm.status.BatchCount = qm.batchCount
+	qm.status.CurrentBatchIndex = qm.currentBatchIndex
+	qm.status.PausedAt = qm.pausedAt
 	return qm.status
 }
 
@@ -171,6 +220,47 @@ func (qm *compressQueueManager) setWorkerActive(active bool) {
 			qm.status.Status = "idle"
 		}
 	}
+}
+
+func (qm *compressQueueManager) pauseWorker() {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.paused = true
+	now := time.Now()
+	qm.pausedAt = &now
+	qm.status.Status = "paused"
+	qm.status.PausedAt = qm.pausedAt
+}
+
+func (qm *compressQueueManager) resumeWorker() {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.paused = false
+	qm.pausedAt = nil
+	qm.status.Status = "running"
+	qm.status.PausedAt = nil
+	qm.cond.Broadcast()
+}
+
+func (qm *compressQueueManager) cancelAll() {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.cancelRequested = true
+	qm.queue = nil
+	qm.cond.Broadcast()
+}
+
+func (qm *compressQueueManager) skipCurrentBatch() {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.skipBatchRequested = true
+	qm.cond.Broadcast()
+}
+
+func (qm *compressQueueManager) setPauseTimeout(minutes int) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	qm.pauseTimeoutMinutes = minutes
 }
 
 // --- Encoder Selection ---
@@ -556,6 +646,47 @@ func compressStatusHandler(w http.ResponseWriter, r *http.Request, d *requestCon
 	return renderJSON(w, r, status)
 }
 
+func compressPauseHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required")
+	}
+	queueMgr.pauseWorker()
+	return renderJSON(w, r, map[string]interface{}{"success": true, "status": "paused"})
+}
+
+func compressResumeHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required")
+	}
+	queueMgr.resumeWorker()
+	return renderJSON(w, r, map[string]interface{}{"success": true, "status": "running"})
+}
+
+func compressCancelHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required")
+	}
+	queueMgr.cancelAll()
+	return renderJSON(w, r, map[string]interface{}{"success": true, "status": "cancelled"})
+}
+
+func compressSkipBatchHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required")
+	}
+	queueMgr.skipCurrentBatch()
+	return renderJSON(w, r, map[string]interface{}{"success": true, "status": "running"})
+}
+
+func compressQueueHandler(w http.ResponseWriter, r *http.Request, d *requestContext) (int, error) {
+	if !d.user.Permissions.Admin {
+		return http.StatusForbidden, fmt.Errorf("admin permission required")
+	}
+	queueMgr.mu.RLock()
+	defer queueMgr.mu.RUnlock()
+	return renderJSON(w, r, map[string]interface{}{"queue": queueMgr.queue, "current": queueMgr.current})
+}
+
 // @Summary Compress images
 // @Description Start batch image compression with optional ZSTD backup
 // @Tags compress
@@ -640,6 +771,9 @@ func compressHandler(w http.ResponseWriter, r *http.Request, d *requestContext) 
 	if !queueMgr.isWorkerActive() {
 		go compressWorker()
 	}
+
+	// Set pause timeout from user settings (v1.4.0.6)
+	queueMgr.setPauseTimeout(d.user.CompressPauseTimeout)
 
 	// Return queue position immediately
 	return renderJSON(w, r, map[string]interface{}{
@@ -730,9 +864,58 @@ func compressWorker() {
 				os.Remove(filePath)
 			}
 			success++
-		}
 
-		queueMgr.finishCurrent(totalSavedBytes, backupPathDisplay, backupFallback)
+			// Check control flags after each file (v1.4.0.6)
+			if queueMgr.cancelRequested {
+				queueMgr.mu.Lock()
+				queueMgr.cancelRequested = false
+				queueMgr.queue = nil
+				queueMgr.mu.Unlock()
+				queueMgr.finishCurrent(totalSavedBytes, backupPathDisplay, backupFallback)
+				return
+			}
+			if queueMgr.skipBatchRequested {
+				queueMgr.mu.Lock()
+				queueMgr.skipBatchRequested = false
+				queueMgr.mu.Unlock()
+				break
+			}
+			if queueMgr.paused {
+				// Start timeout goroutine for auto-cancel
+				go func(timeoutMin int) {
+					if timeoutMin <= 0 {
+						return
+					}
+					time.Sleep(time.Duration(timeoutMin) * time.Minute)
+					queueMgr.mu.Lock()
+					if queueMgr.paused && queueMgr.pausedAt != nil {
+						elapsed := time.Since(*queueMgr.pausedAt)
+						if elapsed >= time.Duration(timeoutMin)*time.Minute {
+							queueMgr.cancelRequested = true
+							queueMgr.queue = nil
+							queueMgr.paused = false
+							queueMgr.status.Status = "cancelled"
+							queueMgr.cond.Broadcast()
+						}
+					}
+					queueMgr.mu.Unlock()
+				}(queueMgr.pauseTimeoutMinutes)
+
+				queueMgr.cond.Wait()
+
+				if queueMgr.cancelRequested {
+					queueMgr.cancelRequested = false
+					queueMgr.finishCurrent(totalSavedBytes, backupPathDisplay, backupFallback)
+					return
+				}
+				if queueMgr.skipBatchRequested {
+					queueMgr.skipBatchRequested = false
+					break
+				}
+			}
+			}
+
+			queueMgr.finishCurrent(totalSavedBytes, backupPathDisplay, backupFallback)
 	}
 }
 

@@ -538,7 +538,11 @@ export default {
 
         // Set transitioning state - keeps old req visible until new one loads
         // Editor and other components check isTransitioning to prevent saves
-        mutations.setNavigationTransitioning(true);
+        // Bug H fix: For image previews, do NOT set transitioning - let ExtendedImage's
+        // dual-buffer transition system handle the visual change smoothly.
+        if (getters.previewType() !== 'image') {
+          mutations.setNavigationTransitioning(true);
+        }
         if (this.isMediaQueueMode) {
           replaceRouteForPlaybackQueueStep(this.$router, -1);
         } else {
@@ -557,7 +561,11 @@ export default {
 
         // Set transitioning state - keeps old req visible until new one loads
         // Editor and other components check isTransitioning to prevent saves
-        mutations.setNavigationTransitioning(true);
+        // Bug H fix: For image previews, do NOT set transitioning - let ExtendedImage's
+        // dual-buffer transition system handle the visual change smoothly.
+        if (getters.previewType() !== 'image') {
+          mutations.setNavigationTransitioning(true);
+        }
 
         if (this.isMediaQueueMode) {
           replaceRouteForPlaybackQueueStep(this.$router, 1);
@@ -803,8 +811,10 @@ export default {
           }
         }
 
-        // Reset touch state
-        this.resetTouchState();
+        // Do NOT call resetTouchState() here - keep touchState.triggered alive
+        // so handlePrevClick/handleNextClick can check it to prevent double navigation.
+        // resetTouchState() will be called in handlePrevClick/handleNextClick instead.
+        this.touchState.isButtonTouch = false;
       }
 
       // Reset navigation swipe state
@@ -919,30 +929,42 @@ export default {
     },
 
     handlePrevClick() {
-      // If a drag was not at the maximum, don't navigate and return the button to its initial position
       if (this.dragState.wasDrag) {
         this.dragState.wasDrag = false;
         this.resetDragState();
+        this.resetTouchState();
         return;
       }
-      // Only navigate if this wasn't a drag
+      // Bug H fix: Check if touchend already handled this navigation
+      if (this.touchState.triggered) {
+        this.resetTouchState();
+        this.resetDragState();
+        return;
+      }
       if (!this.dragState.triggered) {
         this.prev();
       }
+      this.resetTouchState();
       this.resetDragState();
     },
 
     handleNextClick() {
-      // If a drag was not at the maximum, don't navigate and return the button to its initial position
       if (this.dragState.wasDrag) {
         this.dragState.wasDrag = false;
         this.resetDragState();
+        this.resetTouchState();
         return;
       }
-      // Only navigate if this wasn't a drag
+      // Bug H fix: Check if touchend already handled this navigation
+      if (this.touchState.triggered) {
+        this.resetTouchState();
+        this.resetDragState();
+        return;
+      }
       if (!this.dragState.triggered) {
         this.next();
       }
+      this.resetTouchState();
       this.resetDragState();
     },
 

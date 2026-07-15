@@ -61,3 +61,7 @@ backend/custom.css
 # Runtime cache directories created by tests/application
 backend/preview/heic/
 backend/preview/thumbnails/
+
+# Docker image tar files - do not auto-track in repo
+# Add to release manually when MASTER confirms version is good
+*.tar

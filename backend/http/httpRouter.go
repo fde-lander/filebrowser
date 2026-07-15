@@ -147,6 +147,11 @@ func StartHttp(ctx context.Context, storage *bolt.BoltStore, shutdownComplete ch
 	api.HandleFunc("POST /compress-images/preview", withUser(compressPreviewHandler))
 	api.HandleFunc("POST /compress-images", withUser(compressHandler))
 	api.HandleFunc("GET /compress-images/status", withUser(compressStatusHandler))
+	api.HandleFunc("POST /compress-images/pause", withUser(compressPauseHandler))
+	api.HandleFunc("POST /compress-images/resume", withUser(compressResumeHandler))
+	api.HandleFunc("POST /compress-images/cancel", withUser(compressCancelHandler))
+	api.HandleFunc("POST /compress-images/skip-batch", withUser(compressSkipBatchHandler))
+	api.HandleFunc("GET /compress-images/queue", withUser(compressQueueHandler))
 
 	// Legacy routes (backwards compatibility)
 	api.HandleFunc("GET /raw", withUser(downloadHandler))

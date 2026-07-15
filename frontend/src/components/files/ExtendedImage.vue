@@ -1,5 +1,5 @@
 <template>
-  <div class="image-ex-container" ref="container" @touchstart="touchStart" @touchmove.prevent="touchMove" @touchend="touchEnd" @dblclick="zoomAuto"
+  <div class="image-ex-container" ref="container" @touchstart="touchStart" @touchmove="touchMove" @touchend="touchEnd" @dblclick="zoomAuto"
     @mousedown="mousedownStart" @mousemove="mouseMove" @mouseup="mouseUp" @wheel="wheelMove" @click="handleImageClick">
     <!-- Thumbnail placeholder (shown while full image loads, only if cached thumbnail exists) -->
     <img 
@@ -786,7 +786,7 @@ export default {
         const ay = Math.abs(this.edgeDy);
         if (ax < this.edgeHintPx && ay < this.edgeHintPx) {
           this.snapBackEdgeGesture();
-          return;
+          return false;
         }
         kind = ax >= ay ? 'horizontal' : 'vertical-dismiss';
       }
@@ -795,13 +795,13 @@ export default {
           this.$emit('navigate-previous');
           this.resetEdgeGestureImmediate();
           this.applyImgTransform();
-          return;
+          return true;
         }
         if (this.edgeDx <= -this.edgeCommitX && this.hasImageNext) {
           this.$emit('navigate-next');
           this.resetEdgeGestureImmediate();
           this.applyImgTransform();
-          return;
+          return true;
         }
       } else if (kind === 'vertical-dismiss') {
         if (this.edgeDy >= this.edgeCommitY) {
@@ -821,10 +821,11 @@ export default {
             this.showDismissHint = false;
             mutations.setNavigationGestureHint({});
           }, 420);
-          return;
+          return true;
         }
       }
       this.snapBackEdgeGesture();
+      return false;
     },
     teardownEdgeMouseListeners() {
       document.removeEventListener('mousemove', this.onEdgeMouseMove, true);
@@ -964,8 +965,8 @@ export default {
       event.preventDefault();
     },
     touchMove(event) {
-      // Default is prevented via @touchmove.prevent so the browser cannot steal
-      // vertical drags (pull-to-refresh) before our edge-gesture thresholds.
+      // Default is prevented conditionally when a swipe gesture is in progress
+      // (edgeStartX !== 0 and movement > 5px), allowing synthetic click events
       if (event.targetTouches.length === 2) {
         if (!this.pinchActive) {
           this.pinchActive = true;
@@ -997,6 +998,9 @@ export default {
         const touch = event.targetTouches[0];
         this.edgeDx = touch.pageX - this.edgeStartX;
         this.edgeDy = touch.pageY - this.edgeStartY;
+        if (this.scale === 1 && this.edgeStartX !== 0 && Math.abs(this.edgeDx) > 5) {
+          event.preventDefault();
+        }
         this.decideEdgeKind();
         this.applyEdgeVisuals();
         return;
@@ -1050,8 +1054,10 @@ export default {
         const t = event.changedTouches[0];
         this.edgeDx = t.pageX - this.edgeStartX;
         this.edgeDy = t.pageY - this.edgeStartY;
-        this.finishEdgeGesture();
-        event.preventDefault();
+        const navigated = this.finishEdgeGesture();
+        if (navigated) {
+          event.preventDefault();
+        }
       } else if (this.scale > 1) {
         event.preventDefault();
       }

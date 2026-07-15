@@ -604,6 +604,7 @@ export const mutations = {
           "fileLoading",
           "deleteAfterArchive",
           "compressBackup",
+          "compressPauseTimeout",
           "preferEditorForMarkdown",
         ].includes(key)
       );

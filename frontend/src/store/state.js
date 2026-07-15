@@ -65,6 +65,7 @@ export const state = reactive({
     hideFilesInTree: false,
     deleteAfterArchive: true,
     compressBackup: false,
+    compressPauseTimeout: 30,
     locale: detectLocale(), // Default to the locale from moment
     viewMode: 'normal', // Default to mosaic view
     showHidden: false, // Default to false, assuming this is a boolean

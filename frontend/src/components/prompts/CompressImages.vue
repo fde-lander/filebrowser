@@ -193,30 +193,6 @@
   <div class="card-actions">
     <template v-if="!compressing">
       <button
-        v-if="compressing && _status?.status === 'running'"
-        type="button"
-        class="button button--flat"
-        @click="handlePause"
-      >{{ $t("compress.pause") }}</button>
-      <button
-        v-if="compressing && _status?.status === 'paused'"
-        type="button"
-        class="button button--flat"
-        @click="handleResume"
-      >{{ $t("compress.resume") }}</button>
-      <button
-        v-if="compressing && _status?.queueLength > 0"
-        type="button"
-        class="button button--flat"
-        @click="handleSkipBatch"
-      >{{ $t("compress.skipBatch") }}</button>
-      <button
-        v-if="compressing"
-        type="button"
-        class="button button--flat"
-        @click="handleCancelAll"
-      >{{ $t("compress.cancelAll") }}</button>
-      <button
         type="button"
         class="button button--flat button--grey"
         @click="closeTopPrompt"
@@ -225,7 +201,6 @@
         {{ $t("general.cancel") }}
       </button>
       <button
-        v-if="!compressing"
         type="button"
         class="button button--flat"
         :disabled="selectedFileCount === 0"
@@ -240,7 +215,7 @@
 <script>
 import { state, mutations } from "@/store";
 import { notify } from "@/notify";
-import { previewCompress, startCompress, pollStatus, pauseCompress, resumeCompress, cancelCompress, skipBatch } from "@/api/compress.js";
+import { previewCompress, startCompress, pollStatus } from "@/api/compress.js";
 import { getPreviewURL, fetchFiles } from "@/api/resources.js";
 import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import ToggleSwitch from "@/components/settings/ToggleSwitch.vue";
@@ -283,7 +258,6 @@ export default {
       selectedFiles: {},
       collapsedGroups: {},
       pollTimer: null,
-      _status: null,
     };
   },
   computed: {
@@ -341,8 +315,6 @@ export default {
     this.backupEnabled = state.user?.compressBackup ?? true;
     // Expand folders to individual image files
     this.expandItems();
-    // Check if backend has active compression (Bug B fix - Layer 2)
-    this.checkBackendStatus();
   },
   beforeUnmount() {
     this.cleanupBlobUrls();
@@ -462,99 +434,6 @@ export default {
       if (this.previewUrls.compressed && this.previewUrls.compressed.startsWith('blob:')) {
         URL.revokeObjectURL(this.previewUrls.compressed);
       }
-    },
-    async checkBackendStatus() {
-      try {
-        const status = await pollStatus();
-        if (status.status === "running" || status.status === "paused") {
-          this._status = status;
-          this.compressing = true;
-          this.progressData = {
-            total: status.total || 0,
-            current: status.processed || 0,
-            fileName: status.currentFile || "",
-          };
-          this.pollTimer = setInterval(async () => {
-            try {
-              const s = await pollStatus();
-              this._status = s;
-              this.progressData = {
-                total: s.total || 0,
-                current: s.processed || 0,
-                fileName: s.currentFile || "",
-              };
-              if (s.status === "idle" || s.status === "completed" || s.status === "cancelled") {
-                clearInterval(this.pollTimer);
-                this.pollTimer = null;
-                this.compressing = false;
-              }
-            } catch (err) {
-              console.error("Poll failed:", err);
-            }
-          }, 3000);
-        }
-      } catch (err) {
-        console.error("Failed to check backend compress status:", err);
-      }
-    },
-    async handlePause() {
-      try {
-        await pauseCompress();
-      } catch (err) {
-        console.error("Pause failed:", err);
-        notify.showError(this.$t("prompts.compressControlError"));
-      }
-    },
-    async handleResume() {
-      try {
-        await resumeCompress();
-      } catch (err) {
-        console.error("Resume failed:", err);
-        notify.showError(this.$t("prompts.compressControlError"));
-      }
-    },
-    handleSkipBatch() {
-      const remaining = (this.progressData.total - this.progressData.current);
-      mutations.showPrompt({
-        name: "confirmAction",
-        props: {
-          title: this.$t("prompts.skipBatchTitle"),
-          message: this.$t("prompts.skipBatchMessage", { count: remaining }),
-          danger: true,
-          confirmText: this.$t("prompts.skipBatchConfirm"),
-        },
-        confirm: async () => {
-          mutations.closeTopPrompt();
-          try {
-            await skipBatch();
-          } catch (err) {
-            console.error("Skip batch failed:", err);
-            notify.showError(this.$t("prompts.compressControlError"));
-          }
-        },
-      });
-    },
-    handleCancelAll() {
-      const remaining = this.progressData.total - this.progressData.current;
-      mutations.showPrompt({
-        name: "confirmAction",
-        props: {
-          title: this.$t("prompts.cancelAllTitle"),
-          message: this.$t("prompts.cancelAllMessage", { count: remaining }),
-          danger: true,
-          confirmText: this.$t("prompts.cancelAllConfirm"),
-        },
-        confirm: async () => {
-          mutations.closeTopPrompt();
-          try {
-            await cancelCompress();
-            this.compressing = false;
-          } catch (err) {
-            console.error("Cancel failed:", err);
-            notify.showError(this.$t("prompts.compressControlError"));
-          }
-        },
-      });
     },
     confirmCompress() {
       this.showConfirm = true;

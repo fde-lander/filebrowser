@@ -1,102 +1,80 @@
-# Task Plan: FileBrowser Quantum - Custom Patches (Round 2)
+# Task Plan: FileBrowser Quantum - v1.4.0.6-fde
 
 ## Goal
 
-Two major feature upgrades:
-1. **Image Viewer Enhancement** - preload + transition + tap navigation + persistent mobile buttons
-2. **Image Compression** - right-click batch compress with preview + ZSTD backup
+v1.4.0.6-fde: Mobile bug fixes (G/H/I) + Compress control features (pause/continue/cancel/skip) + Bug B re-investigation + Queue List API + cumulative progress + pause auto-timeout.
+All modules are independent commits with individual rollback capability.
 
 ## Current Phase
 
-Phase 3 (v1.4.0.4 Hotfix - Deep Code Research + Design)
-
-## Project Context
-
-- **Base Version:** v1.4.0-stable (locked, no upstream changes)
-- **Fork URL:** https://github.com/fde-lander/filebrowser.git
-- **Project Path:** /home/hermes/workspace/filebrowser-fde
-- **Branch:** v1.4.0.2-image-viewer-compression (7 commits: 6 feature + 1 hotfix)
-- **Previous Round:** Extract-to-folder feature complete (5 commits, 9 files, 454 insertions)
-- **Docker image:** filebrowser-fde:v1.4.0.2 (84MB tar at project root)
-- **Go binary:** /usr/local/go/bin/go (NOT in default PATH)
-- **Subagent delegation:** config fixed (provider: custom:iturn), working
+Phase 5: Implementation (IN PROGRESS - inline execution)
 
 ## Phases
 
-### Phase 1: Design & Brainstorming (COMPLETED)
-- [x] Subagent code research: image viewer frontend (3 agents parallel)
-- [x] Subagent code research: image compression backend possibilities
-- [x] Clarify requirements with user
-- [x] Propose approaches for each feature
-- [x] Write design spec document (789 lines, 8 chapters)
-- [x] User reviews spec
-- [x] Implementation plan written (1939 lines, 12 tasks)
-- **Status:** completed
+### Phase 1: Deep Code Research (COMPLETED)
+- Wave 1: 3 subagents dispatched + returned
+- Agent A: Prompts.vue -> CompressImages lifecycle (Bug B root cause)
+- Agent B: ExtendedImage.vue -> touch/click event bindings (Bug G/H root cause)
+- Agent C: compress.go + httpRouter.go + compress.js -> queueMgr + worker + routes (Ch8)
+- All findings verified by main agent via code reading
+- Status: completed
 
-### Phase 1.5: Implementation Wave 1-4 (COMPLETED)
-- [x] Wave 1: 3 subagents parallel (Task 1+2 / 6+7 / 9+11) - ALL PASS
-- [x] Wave 2: 1 subagent (Task 3+4+5 backend compress.go) - PASS
-- [x] Wave 3: 1 subagent (Task 8+10 frontend integration) - PASS
-- [x] Wave 4: Main agent (Task 12 Dockerfile + verification) - PASS
-- [x] Go build + vet + mod verify: ALL PASS
-- [x] Docker build + save: PASS (84MB)
-- **Status:** completed
+### Phase 2: Brainstorming + Design Discussion (COMPLETED)
+- 6 design topics discussed with MASTER, all confirmed:
+  1. Bug B: Method C (two-layer: global status bar + dialog detail)
+  2. Bug G: Conditional preventDefault (preserve swipe + transition)
+  3. Queue progress: Cumulative totalFiles/totalProcessed + batch info
+  4. Cancel scope: Cancel entire queue (not current batch)
+  5. Skip current batch: Added to v1.4.0.6 scope
+  6. Pause auto-timeout: Toggle + numeric input, default 30min, cross-session persisted
+- Skip/Cancel require confirmation dialog (showPrompt system)
+- Only 1 batch: hide skip button
+- Status: completed
 
-### Phase 1.6: Hotfix 1 (COMPLETED)
-- [x] Deploy + test by MASTER
-- [x] Bug 1 fix: i18n key paths (settings.* -> profileSettings.*)
-- [x] Bug 2 fix: imagePreload/imageTapNav default true in Profile.vue
-- [x] Bug 3 partial fix: src watcher calls doTransition() + Preview.vue no isTransitioning
-- [x] Bug 4 fix: CompressImages.vue items prop + mounted() null guard
-- **Status:** completed (commit ad5f2774)
+### Phase 3: Design Spec Writing (IN PROGRESS)
+- 10 chapters, chapter-by-chapter PATCH
+- Status: in_progress
 
-### Phase 2: Bug Fix & Permission Enhancement (COMPLETED)
-- [x] Subagent parallel analysis: Bug A/B/C/D + permission system
-- [x] Brainstorming: design fix approaches + permission gate design
-- [x] Design spec + implementation plan
-- [x] Implementation (main agent inline, 5 commits)
-- [x] Build + deploy + test by MASTER
-- **Status:** completed (v1.4.0.3 deployed)
+### Phase 5: Implementation (IN PROGRESS - inline execution)
+- Execution mode: INLINE (主 Agent 串行执行)
+- Skills loaded: executing-plans, TDD, PWF
+- Plan: ~/.hermes/docs/superpowers/plans/2026-07-15-v1.4.0.6-fde-plan.md
+- Each Task = 1 git commit, individually rollbackable
+- All patches < 2.5KB
+- Status: in_progress
 
-### Phase 3: v1.4.0.4 Hotfix (CURRENT)
-- [x] Deep code research: 3 subagents parallel
-- [x] Brainstorming: design fix approaches for 5 remaining issues
-- [x] Present design to user, get approval
-- [x] Write design spec (8 chapters, 911 lines)
-- [x] Implementation (main agent inline, 18 tasks, 5 phases)
-- [x] Build + deploy + test (Docker image built + saved)
-- **Status:** COMPLETED (v1.4.0.4 hotfix ready for deployment)
+## Confirmed Design Decisions
 
-### Phase 3: Build & Deploy
-- [ ] Go build + Docker build
-- [ ] Deploy + test
-- **Status:** pending
+1. Bug B: Method C two-layer (global status bar + dialog detail)
+2. Bug G: Remove .prevent from @touchmove, conditional preventDefault in touchMove/touchEnd
+3. Bug H: Ensure nav button calls transition path (nextPrevious.vue investigation needed)
+4. Bug I: @media (max-width: 768px) responsive CSS for preview overlay
+5. Queue List API: Leverage existing CompressJobStatus.Queue field
+6. Cumulative progress: totalFiles/totalProcessed/batchCount/currentBatchIndex
+7. Cancel = entire queue; Skip = current batch only (with batch > 1 check)
+8. Pause/Resume: sync.Cond on queueMgr
+9. Skip/Cancel: secondary confirmation via showPrompt system
+10. Pause auto-timeout: Toggle + numeric (5-120min, default 30), persisted 4-touchpoint
+11. Only 1 batch: hide skip button
 
-## Key Decisions
+## Commit Groups (9 independent commits)
 
-- Locked to v1.4.0-stable base (user confirmed no upstream changes needed)
-- Main branch is default (merged from custom branch, clean state)
-- AVIF excluded: encoding >120s/image, 2.5GB RAM (not feasible on 4GB server)
-- All compression uses WebP except low-tier PNG uses OxiPNG CLI
-- GIF files always skipped (animation too complex)
-- Safety net: if compressed >= original size, keep original
-- ZSTD backup: tar.zst format (tar wrapping zstd, NOT just .zst)
-- Settings persist via NonAdminEditable struct
-- Go bool zero-value = false: imagePreload/imageTapNav need frontend ?? true
-- i18n keys for image viewer settings live under profileSettings.* namespace
-- Preview.vue must NOT set isTransitioning=true for image navigation
-- ExtendedImage.vue src watcher must call doTransition() not loadFullImage()
-- CompressImages.vue requires items prop passed via showPrompt({ props: { items } })
-- Subagent delegation provider: custom:iturn (format: custom:<name>)
-- Main agent does critical code fixes, subagent only for research/deterministic tasks
-- NEW: Permission gate required for extract-to-folder + compress-images features
+1. Global status bar component (Bug B solution)
+2. compress.go: backend flags + sync.Cond + cumulative stats + timeout goroutine
+3. httpRouter.go: new route registration (pause/resume/cancel/skip/queue)
+4. compress.js: frontend API functions
+5. CompressImages.vue: control buttons + detail progress + confirm dialog
+6. CompressImages.vue: preview layout mobile CSS (Bug I)
+7. ExtendedImage.vue: Bug G fix (touchmove.prevent conditional)
+8. Bug H fix (nextPrevious.vue, pending investigation)
+9. Settings system + i18n (compressPauseTimeout)
 
-## Notes
+## Key Constraints
 
-- User requirements: see findings.md for detailed feature requirements
-- Use subagents (max 3 parallel) for code research
-- Design phase only - do NOT implement until user explicitly says so
-- NEW requirement: permission control for extract + compress features
-- Handoff document: /tmp/handoff-r6jEEE.md
-- LanceDB memory: ID d96afe8c (bug status), ID 49271d6b (project facts), ID f13604b0 (v1.4.0.3 results)
-- Branch: v1.4.0.4-hotfix (created from v1.4.0.2-image-viewer-compression @ 3d973404)
+- Transition engine LOCKED at v1.4.0.4-hotfix (do NOT modify)
+- DOUBT principle: subagent research -> verify -> design -> approve
+- Legacy CSS: annotate only, do NOT delete
+- Docker: tar only, never push to Hub
+- No local testing (Docker build -> save -> scp -> deploy)
+- i18n: 3 files must sync (en/zh-cn/zh-tw)
+- HARD-GATE: no sudo without MASTER approval

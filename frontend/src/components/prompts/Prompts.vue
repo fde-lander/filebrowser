@@ -113,7 +113,6 @@ import OfficeDebug from "./OfficeDebug.vue";
 import ThreeJSControls from "./ThreeJSControls.vue";
 import CompressImages from "@/components/prompts/CompressImages.vue";
 import ConfirmAction from "@/components/prompts/ConfirmAction.vue";
-import CompressStatusBar from "@/components/prompts/CompressStatusBar.vue";
 import { state, getters, mutations } from "@/store";
 import { getObjectProperty, omitObjectProperty, setObjectProperty } from "@/utils/object.js";
 
@@ -157,7 +156,6 @@ export default {
     ThreeJSControls,
     CompressImages,
     ConfirmAction,
-    CompressStatusBar,
   },
   data() {
     return {

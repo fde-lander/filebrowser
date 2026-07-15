@@ -1,219 +1,106 @@
-# Progress Log (Round 2 - Bug Fix Phase)
+# Progress Log (v1.4.0.6-fde)
 
-## Session: 2026-07-11 (Bug Fix Phase - Session 2)
+## Session: 2026-07-15
 
-### Session 2 Start
-- **Started:** 2026-07-11 (new session, picked up from handoff)
-- **Handoff document:** /tmp/handoff-EmvDWq.md
-- **Brainstorming skill loaded** for systematic design approach
-- **4 subagents dispatched** for parallel code analysis:
-  - Agent 1: Bug A - doTransition race condition (ExtendedImage.vue + Preview.vue)
-  - Agent 2: Bug B - Compress API 404 (httpRouter.go + compress.go + api/compress.js)
-  - Agent 3: Bug C+D - Folder right-click + backup filename (ContextMenu.vue + CompressImages.vue)
-  - Agent 4: Permission system analysis (User struct, route guards, frontend gating)
-- **NEW requirement from user:** Permission gate for extract-to-folder + compress-images
-  - Both features must only be visible/usable by authorized users
-  - Prevent shared users from accidentally triggering compress/extract operations
-- **PWF files updated:** task_plan.md (Phase 2 added), progress.md (Session 2 log)
-- **Status:** Design Spec + Implementation Plan COMPLETED, awaiting user approval to execute
+### Session Start
+- **Branch:** v1.4.0.6-fde (created from v1.4.0.5-fde @ 2c6b4490)
+- **Base tag:** v1.4.0.5-fde-hotfix-latest
+- **PWF + TODO created**
+- **Brainstorming skill loaded**
+- **Codebase-memory indexed:** 3927 nodes, 13640 edges
+- **Handoff document read:** docs/handoff-v1.4.0.6-fde.md (303 lines)
+- **Plan document read:** docs/v1.4.0.6-next-version-plan.md (772 lines, ALL)
+- **LanceDB memory recalled:** 5 relevant entries (Bug B failure, v1.4.0.3/4/5 results)
+- **filebrowser-quantum-docker-setup skill loaded**
 
-### Implementation (Session 2 - Phase 1-4 Complete)
-- Phase 1: Backend (6 tasks) ✅ commit b19e1960
-  - isImageFile() helper, addFileToTar directory recursion
-  - compressHandler directory expansion
-  - Admin checks on all 3 compress handlers + unarchiveHandler
-  - go build + vet + mod verify: ALL PASS
-- Phase 2: Frontend API (2 tasks) ✅ commit f6f12a22
-  - api/compress.js: 8 fixes (URL paths, tier->level, files format, jobId->taskId, backup params)
-  - grep verify: 0 remaining tier/jobId/resources-compress
-- Phase 3: Frontend Components (4 tasks) ✅ commits e90f89a2 + be842d25
-  - CompressImages.vue: backupFileName (.tar.zst), backupPath computed, doCompress (flat files, level, taskId, backup params), updatePreview (level)
-  - ContextMenu.vue: isDir || type === 'directory', permissions.admin
-- Phase 4: Transition Rewrite (9 tasks) ✅ commit ccd433f5
-  - ExtendedImage.vue: Set cache, transitionGeneration, removed bufferA/bufferB data
-  - bufferAStyle/bufferBStyle simplified
-  - onLoad() guard added
-  - doTransition replaced with navigateToImage + swapBuffers + finishTransition closure
-  - preloadAdjacentImages + trimCachePool simplified for Set
-  - src watcher calls navigateToImage
-  - imgB @error added
-  - grep verify: 0 doTransition, 0 imageCachePool.set, 0 this.bufferA/B
-- Phase 5: Build & Deploy ✅ COMPLETE
-  - go build + vet + mod verify: ALL PASS
-  - Docker build v1.4.0.3: SUCCESS (84MB)
-  - Docker save: filebrowser-fde-v1.4.0.3.tar (84MB)
-  - 6 commits total on v1.4.0.2-image-viewer-compression branch
+### MASTER Directives
+1. v1.4.0.6-fde is the target version
+2. Use codebase-memory system for project analysis
+3. Subagent research for complex code investigation
+4. Give subagents sufficient skills + deterministic instructions
+5. Consider truncation prevention for subagent results
+6. Main agent verifies via codebase + code reading
+7. NO spec writing without MASTER approval
+8. NO implementation without MASTER approval
+9. Discuss thoroughly before acting
+10. Manage TODO properly
 
-### v1.4.0.3 Test Results (2026-07-12, tested by MASTER)
+### Phase 1: DOUBT Code Research (COMPLETED)
+- Wave 1: 3 subagents dispatched + returned (43s total)
+- All findings verified by main agent via independent code reading
+- Key verified findings:
+  - Prompts.vue: NO keep-alive, mounted() fires on every reopen
+  - ExtendedImage.vue: @touchmove.prevent kills click events on mobile
+  - compress.go: queueMgr struct confirmed, NO pause/cancel mechanism exists
+  - showPrompt system has built-in confirm/callback mechanism
+  - compressBackup persistence: 4-touchpoint (state.js + mutations.js + users.go + CompressImages.vue)
 
-**Bug A (Image Transition) - PARTIALLY FIXED ⚠️**
-- crossfade mode: SMOOTH, natural for normal-paced navigation ✅
-- After 5-6 rapid page turns: brief black flash in ALL modes ⚠️
-- crossfade masks the gap well (transition duration hides it)
-- instant mode: gap MOST visible - black flash then image appears
-- User desired: instant mode should NEVER show black - old image stays until new ready
-- Root cause: swapBuffers instant path hides fromRef before toRef decoded
+### Phase 2: Brainstorming + Design Discussion (COMPLETED)
+- 6 design topics discussed with MASTER, all confirmed:
+  1. Bug B: Method C (two-layer: global status bar + dialog detail)
+  2. Bug G: Conditional preventDefault (preserve swipe + transition)
+  3. Queue progress: Cumulative totalFiles/totalProcessed + batch info
+  4. Cancel scope: Cancel entire queue (not current batch)
+  5. Skip current batch: Added to v1.4.0.6 scope
+  6. Pause auto-timeout: Toggle + numeric input, default 30min, cross-session persisted
+- Skip/Cancel require confirmation dialog (showPrompt system)
+- Only 1 batch: hide skip button
 
-**Bug B (Compress API 404) - FIXED ✅**
-- No 404 errors on any API call
-- Preview API returns 200 (3.6s - noted for UX improvement)
+### Phase 3: Design Spec Writing (COMPLETED)
+- 10 chapters written, 1230 lines, 44KB
+- Spec location: ~/.hermes/docs/superpowers/specs/2026-07-15-v1.4.0.6-fde-design.md
+- Ch4 Bug H updated: root cause = double navigation + transitioning overlay (verified by 2 subagents)
+- Self-review: 0 placeholders, 0 contradictions, 0 ambiguities
+- Bug H fix: 2 independent fixes in nextPrevious.vue (double nav guard + skip transitioning for images)
+- nextPrevious.vue has getters.previewType() but NO previewType computed -> use getters.previewType() directly
+- Status: completed, awaiting MASTER review
 
-**Bug C (Folder Right-Click) - FIXED ✅**
-- Folder/file/multi-select all show compress option
+### Phase 4: Implementation Plan Writing (COMPLETED)
+- writing-plans skill loaded
+- Plan location: ~/.hermes/docs/superpowers/plans/2026-07-15-v1.4.0.6-fde-plan.md
+- 10 tasks + post-build checklist, 2537 lines, 84KB
+- ALL tasks have precise old_string/new_string, complete code, grep verification, commit messages
+- Self-review: spec coverage complete, 0 placeholders, type consistency verified
+- Status: completed, awaiting MASTER review
 
-**Bug D (Backup Feature) - NOT FIXED ❌**
-- 3 critical issues remain (see handoff document)
+### Phase 5: Handoff Document (COMPLETED)
+- Handoff skill loaded
+- Handoff doc: docs/handoff-v1.4.0.6-fde-implementation.md (8KB)
+- Covers: project context, 10 task overview, key decisions, CRITICAL warnings,
+  post-build checklist, artifacts, environment, recommended skills
+- Status: completed, ready for implementation AI
 
-**Permission Gate - WORKING ✅**
-- Admin/non-admin/share users all behave correctly
+### Phase 5: Implementation (IN PROGRESS)
+- Session start: 2026-07-16
+- Execution mode: INLINE (主 Agent 串行)
+- Skills loaded: PWF, executing-plans, TDD
+- Plan: 10 Tasks, each = 1 git commit
+- Status: 10/10 tasks completed + Post-Build verification
 
-### v1.4.0.4 Hotfix Session (2026-07-13)
+#### All Tasks COMPLETED
+- Task 1: Bug G (87b16212) - ExtendedImage.vue touchmove.prevent
+- Task 2: Bug H (50dda77c) - nextPrevious.vue double nav + transitioning
+- Task 3: Bug I (b129eda3) - CompressImages.vue @media CSS
+- Task 4: Backend compress control (e87a7eb4) - compress.go + users.go
+- Task 5: Routes (8421e7df) - httpRouter.go 5 new routes
+- Task 6: Frontend API (eac03203) - compress.js 5 new functions
+- Task 7: ConfirmAction.vue (65ce705f) - generic confirm dialog
+- Task 8: CompressStatusBar.vue (1e558660) - global status bar
+- Task 9: CompressImages.vue (ba2f4801) - control buttons + mounted check
+- Task 10: Settings + i18n (6b14db97) - 7 files, 21 keys x 3 languages
 
-**Session Start**
-- New branch: v1.4.0.4-hotfix (from v1.4.0.2-image-viewer-compression @ 3d973404)
-- PWF files updated for Phase 3
-- Brainstorming skill loaded
-- 3 subagents dispatched for deep code research:
-  - Agent 1: compress.go backend - compressPreviewHandler + compressHandler backup + resolveCompressPath
-  - Agent 2: CompressImages.vue frontend - updatePreview() + backupPath/backupName + API response handling
-  - Agent 3: ExtendedImage.vue - swapBuffers() instant branch + decode/onload mechanism
-- Goal: Find exact break points and code-level fix directions before design discussion
-- Status: code research COMPLETE (3/3 agents returned, 423s total)
-- Brainstorming: ALL 5 issues discussed with MASTER, design confirmed
-  - Issue 1 (backup path): 3-level fallback + abort if all fail
-  - Issue 2 (preview handler dir expansion): os.Stat + filepath.Walk first image
-  - Issue 3 (SSE fields): event name fix + field mapping
-  - Issue 4 (preview UI redesign): checkbox toggle + overlay + fullscreen
-  - Issue 5 (transition): decode-first architecture + seamless crossfade all modes
-- Status: design spec writing phase
-- Spec COMPLETED: /home/hermes/.hermes/docs/superpowers/specs/2026-07-13-v1.4.0.4-hotfix-design.md
-  - 8 chapters, 911 lines, 31KB
-  - Covers all 5 issues with exact line numbers, code snippets, verification checklist
-  - Self-review passed: 0 placeholders, 0 contradictions, 0 ambiguities
-- Plan COMPLETED: /home/hermes/.hermes/docs/superpowers/plans/2026-07-13-v1.4.0.4-hotfix-plan.md
-  - 18 tasks, 5 phases, 1429 lines
-- Implementation COMPLETED (18/18 tasks):
-  - Phase 1 (Backend): finishEvent struct + backup path resolve + 3-level fallback + dir expansion (3 commits)
-  - Phase 2 (Frontend API): SSE event name fix + previewCompress blob rewrite (1 commit)
-  - Phase 3 (CompressImages.vue): SSE field mapping + preview UI redesign + methods (1 commit)
-  - Phase 4 (ExtendedImage.vue): decode-first + 3-mode crossfade + CSS fix (1 commit)
-  - Phase 5 (i18n + Profile.vue): new keys + fade option (1 commit)
-- Build COMPLETED:
-  - go build: PASS
-  - go vet: PASS
-  - go mod verify: PASS
-  - JSON validation: 3/3 PASS
-  - Grep sweep: ALL markers correct
-  - Docker build: PASS (84MB)
-  - Docker save: filebrowser-fde-v1.4.0.4.tar (84MB)
+#### Post-Build Verification
+- go build: PASS ✅
+- go vet: PASS ✅
+- go mod verify: PASS ✅
+- Grep sweep: ALL PASS ✅
+- JSON validity: EN/CN/TW ALL PASS ✅
+- Commit count: 10 task commits ✅
+- Docker build: SUCCESS ✅ (84MB tar)
+- Docker save: SUCCESS ✅
+- Build cache pruned: 3.691GB reclaimed ✅
+- Tar: filebrowser-fde-v1.4.0.6.tar (84MB)
 - Status: READY FOR DEPLOYMENT
-- Deployed + tested by MASTER (2026-07-13)
-- Test feedback recorded: 6 issues for v1.4.0.5
-- v1.4.0.5 plan written: /home/hermes/workspace/filebrowser-fde/docs/v1.4.0.5-next-version-plan.md
-  - Ch1: Transition cache clear note (LOW)
-  - Ch2: Backend background compress system (CRITICAL) - job manager + SSE independent + single instance
-  - Ch3: Backup toggle persistence + default ON (HIGH)
-  - Ch4: Folder file list expansion - frontend directory expansion (HIGH)
-  - Ch5: Preview original image blurry - add &size=original (HIGH)
-  - Ch6: SSE progress accuracy - send after processing + heartbeat + reconnection (HIGH)
-  - Ch7: Summary + priority order + architecture diagram + test checklist
-- Remote main pushed with v1.4.0.5 plan doc
-
-### Critical Issues for Next Hotfix (v1.4.0.4)
-
-1. Folder compression 500: compressPreviewHandler lacks directory expansion
-2. Backup file creation fails: backupPath not resolved through source mapping
-3. Compression stuck at 0/N: caused by backup failure (backup-first design)
-4. Preview not rendering: API returns 200 but no visible preview
-5. Instant transition black flash: swapBuffers hides fromRef too early
-
-**Handoff document: /tmp/handoff-r6jEEE.md**
-**LanceDB memory: ID d96afe8c (previous bug status)**
-
-### Brainstorming & Design Spec (Session 2)
-- Brainstorming skill loaded, 4 subagents dispatched for parallel code analysis
-- All 4 subagent results analyzed and recorded in findings.md
-- 5 clarifying questions discussed with user (Bug A approach, Bug B direction, Bug C/D details, Bug D backup, permission design)
-- Design spec written: 8 chapters, 849 lines
-  - Ch1: Overview & Scope
-  - Ch2: Bug A - Image Transition Redesign (simplified architecture with CSS transitions + generation token)
-  - Ch3: Bug B - Compress API Frontend Alignment (URL/field/format/param fixes)
-  - Ch4: Bug C - Folder Right-Click Detection (dual field check)
-  - Ch5: Bug D - Backup Feature Complete Fix (naming, params, directory recursion, backup-first)
-  - Ch6: Permission Gate (Admin permission for both features)
-  - Ch7: File Change Map & Implementation Order (7 files, 5 phases, 23 steps)
-  - Ch8: Verification Checklist (52 items)
-- Spec self-review: 0 placeholders, 0 contradictions, 0 ambiguities, scope OK
-- Spec location: ~/.hermes/docs/superpowers/specs/2026-07-11-bugfix-permission-design.md
-
-### Previous: Hotfix 1 Results (deployed + tested by MASTER)
-
-**Fixed in Hotfix 1 (commit ad5f2774):**
-- Bug 1 ✅: i18n keys moved from settings.* to profileSettings.* + 4 missing keys added
-- Bug 2 ✅: imagePreload/imageTapNav default true in Profile.vue mounted()
-- Bug 3 PARTIAL: src watcher now calls doTransition() instead of loadFullImage() + Preview.vue no isTransitioning for images
-- Bug 4 ✅: items prop passed + mounted() null guard + props default
-
-**Remaining bugs after Hotfix 1 test:**
-
-**Bug A (CRITICAL): Image transition unstable on rapid navigation**
-- Symptom: Fast flipping causes image to disappear, show thumbnail + spinner, then enlarge
-- All 3 modes affected (crossfade, fade_to_black, instant)
-- Cause: doTransition() race conditions, cache pool corruption on rapid nav
-- Files: ExtendedImage.vue doTransition() ~line 452, src watcher ~line 1018
-
-**Bug B (CRITICAL): Compress API returns 404**
-- Symptom: 404 on preview, tier selection, quality slider change
-- Cause: Route registration or URL mismatch
-- Files: httpRouter.go ~line 145, api/compress.js, CompressImages.vue updatePreview()
-
-**Bug C (MEDIUM): Folder right-click missing Compress Images**
-- Symptom: Right-click folder = no compress option
-- Cause: showCompressImages computed may not detect folder selection
-- Files: ContextMenu.vue ~line 333
-
-**Bug D (MINOR): Backup filename wrong**
-- Multi-file missing "etc" suffix
-- Extension should be .tar.zst not .zst
-- Files: CompressImages.vue backupFileName ~line 270, compress.go createBackup()
-
-**Handoff document: /tmp/handoff-EmvDWq.md**
-**LanceDB memory: ID d96afe8c**
-
-### Phase 1: Design & Brainstorming
-- **Status:** in_progress
-- **Started:** 2026-07-11
-- Actions taken:
-  - Merged Round 1 custom branch to main, set default branch to main
-  - Reset PWF files for Round 2
-  - Loaded brainstorming + PWF skills
-  - Dispatched subagents for WebP/AVIF/OxiPNG real compression testing
-  - AVIF excluded (>120s/image, 2.5GB RAM — not feasible)
-  - WebP verified as 100% natively supported by FileBrowser (6/6 checks PASS)
-  - Final tier parameters set based on real test data
-  - Design spec written: 789 lines, 33KB, 8 chapters
-  - Spec self-review: 0 placeholders, internally consistent, no ambiguity
-  - Implementation plan written: 1939 lines, 65KB, 12 tasks
-  - Branch v1.4.0.2-image-viewer-compression created
-  - Wave 1: 3 subagents parallel (Task 1+2 / 6+7 / 9+11) - ALL PASS
-  - Wave 2: 1 subagent (Task 3+4+5 backend compress.go) - PASS
-  - Wave 3: 1 subagent (Task 8+10 frontend integration) - PASS
-  - Wave 4: Main agent (Task 12 Dockerfile + verification) - PASS
-  - go build: PASS, go vet: PASS, go mod verify: PASS
-  - 6 commits total on v1.4.0.2-image-viewer-compression branch
-- Files modified:
-  - task_plan.md, findings.md, progress.md (PWF)
-  - 4 new files + 12 modified files + Dockerfile
-  - Spec + Plan documents
-- Files modified:
-  - task_plan.md (Phase 1 in progress)
-  - findings.md (updated with all research results)
-  - progress.md (updated)
-  - /home/hermes/.hermes/docs/superpowers/specs/2026-07-11-image-viewer-compression-design.md (created - 789 lines)
-- Files modified:
-  - task_plan.md (rewritten for Round 2)
-  - findings.md (rewritten for Round 2)
-  - progress.md (rewritten for Round 2)
 
 ---
 *Update after completing each phase or encountering errors*

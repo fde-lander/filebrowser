@@ -217,18 +217,6 @@
             />
           </div>
         </SettingsItem>
-        <SettingsItem aria-label="compressSettings" :title="$t('profileSettings.compressSettings')" :collapsable="true"
-          :start-collapsed="true" :force-collapsed="isSectionCollapsed('compressSettings')"
-          @toggle="handleSectionToggle('compressSettings')">
-          <div class="settings-items">
-            <div class="settings-item-select">
-              <label>{{ $t('profileSettings.compressPauseTimeout') }}</label>
-              <input type="number" class="input" v-model.number="localuser.compressPauseTimeout"
-                @change="updateSettings" min="0" max="120" step="5" />
-              <span class="description">{{ $t('profileSettings.compressPauseTimeoutDescription') }}</span>
-            </div>
-          </div>
-        </SettingsItem>
         <SettingsItem aria-label="themeLanguage" :title="$t('profileSettings.themeAndLanguage')" :collapsable="true"
           :start-collapsed="true" :force-collapsed="isSectionCollapsed('themeLanguage')"
           @toggle="handleSectionToggle('themeLanguage')">
@@ -376,9 +364,6 @@ export default {
     }
     if (typeof this.localuser.imageTapNav !== 'boolean') {
       this.localuser.imageTapNav = true;
-    }
-    if (typeof this.localuser.compressPauseTimeout !== 'number') {
-      this.localuser.compressPauseTimeout = 30;
     }
   },
   methods: {

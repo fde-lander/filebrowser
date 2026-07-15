@@ -172,7 +172,6 @@ type NonAdminEditable struct {
 	CompressLevel              string               `json:"compressLevel"`              // low, medium, high
 	CompressQuality            int                  `json:"compressQuality"`            // last used quality value
 	CompressBackup             bool                 `json:"compressBackup"`             // ZSTD backup before compression
-	CompressPauseTimeout       int                  `json:"compressPauseTimeout"`       // auto-cancel pause after N minutes (0=disabled, default 30)
 	PreferEditorForMarkdown    bool                 `json:"preferEditorForMarkdown"`    // prefer editor first for markdown files instead of the Markdown Viewer
 	ShowFirstLogin             bool                 `json:"showFirstLogin"`
 	PasskeyCredentials         []WebAuthnCredential `json:"passkeyCredentials,omitempty"`

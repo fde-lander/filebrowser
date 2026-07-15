@@ -112,7 +112,6 @@ import ExtractToFolder from "./ExtractToFolder.vue";
 import OfficeDebug from "./OfficeDebug.vue";
 import ThreeJSControls from "./ThreeJSControls.vue";
 import CompressImages from "@/components/prompts/CompressImages.vue";
-import ConfirmAction from "@/components/prompts/ConfirmAction.vue";
 import { state, getters, mutations } from "@/store";
 import { getObjectProperty, omitObjectProperty, setObjectProperty } from "@/utils/object.js";
 
@@ -155,7 +154,6 @@ export default {
     OfficeDebug,
     ThreeJSControls,
     CompressImages,
-    ConfirmAction,
   },
   data() {
     return {

@@ -23,53 +23,51 @@
 
 ---
 
-## ⚠️ 重要提醒：部署模式已變更
+## ⚠️ 重要提醒：部署模式
 
-本項目自即日起採用 **「目標伺服器拉取倉庫 → Docker Build → Docker Compose」** 模式。
+本項目採用 **「本地建置 + tar.zst 傳輸 + 遠端載入」** 模式。
 
-• 在目標伺服器上 `git clone` 本倉庫
-• 在目標伺服器上執行 `docker build` 產生映像
-• 用 `docker compose` 直接使用該映像啟動服務
+• 在建置機器上執行 `docker build` 產生映像
+• 用 `docker save` + `zstd` 壓縮為 `.tar.zst` 檔
+• 將 `.tar.zst` 傳輸到目標伺服器
+• 在目標伺服器上執行 `docker load` 載入映像
+• 用 `docker compose` 啟動服務
 
-**本倉庫不再提供預先編譯的 tar 映像檔。** 倉庫內所有 `*.tar` 已列入 `.gitignore`，不會被追蹤、不會被推送。`git clone` 之後目錄內沒有 tar 檔是預期行為。
+**目標伺服器不需要建置環境，不需要 Git、Go、Node.js，只需要 Docker Engine。**
 
-**完整詳細的部署指引（含前置需求、建置指令、設定檔、疑難排解、低記憶體伺服器注意事項、回滾流程）請務必閱讀：**
+**完整詳細的部署指引請務必閱讀：**
 
 📄 **[DEPLOY.md](DEPLOY.md)**
-
-部署前請先完整讀過該文件再動手，尤其是「資源需求與低記憶體伺服器注意事項」章節。
 
 ---
 
 ## 歷史版本說明（日期倒序）
 
-| 日期 | 版本 | 內容摘要 | 狀態 |
-| --- | --- | --- | --- |
-| 2026-07-16 | v1.4.0.5-fde-hotfix | 移動端壓縮預覽佈局修正（Bug I）；首個 GitHub Release 發佈 | 採用（最新穩定版） |
-| 2026-07-16 | v1.4.0.6 | 行動端 Bug G/H/B 修復 ＋ 壓縮控制功能（暫停／繼續／取消／跳過）等 | 已作廢（部署後失效，全數回滾） |
-| 2026-07-16 | v1.4.0.7 | 原定為 v1.4.0.6 的後續修復計劃 | 已作廢（未實施，直接跳過） |
-| 2026-07-14 | v1.4.0.5 | 壓縮系統改為佇列式輪詢、備份開關跨 session 持久化、資料夾展開、PNG 低檔改 WebP Q75、預覽原圖清晰度修正、進度計數修正、資料夾壓縮修正、行動端豎屏相容 | 採用（已併入最新版） |
-| 2026-07-13 | v1.4.0.4-hotfix | 備份路徑三級退避、預覽目錄展開、輪詢欄位對齊、預覽 UI 重做、decode-first 過渡架構 | 採用（已併入） |
-| 2026-07-12 | v1.4.0.3 | 過渡架構重寫、壓縮 API 前後端對齊、資料夾右鍵偵測、Admin 權限閘門 | 採用（已併入） |
-| 2026-07-11 | v1.4.0.2 | 圖片檢視器增強（雙緩衝／快取池／漸變過渡／點擊翻頁）＋ 圖片壓縮（三檔位／自動備份） | 採用（已併入） |
-| 2026-07-11 | v1.4.0.1 | 解壓到新資料夾 | 採用（已併入） |
+• **2026-09-30** — **v1.5.6.1-fde** — 已作廢（升級失敗，Fork 核心功能全部丟失）
+• **2026-07-16** — **v1.4.0.5-fde-hotfix** — 移動端壓縮預覽佈局修正（Bug I）；首個 GitHub Release 發佈 — **採用（最新穩定版）**
+• **2026-07-16** — v1.4.0.6 — 已作廢（部署後失效，全數回滾）
+• **2026-07-16** — v1.4.0.7 — 已作廢（未實施，直接跳過）
+• **2026-07-14** — v1.4.0.5 — 壓縮系統改為佇列式輪詢等 — 採用（已併入最新版）
+• **2026-07-13** — v1.4.0.4-hotfix — 備份路徑三級退避等 — 採用（已併入）
+• **2026-07-12** — v1.4.0.3 — 過渡架構重寫等 — 採用（已併入）
+• **2026-07-11** — v1.4.0.2 — 圖片檢視器增強 + 圖片壓縮 — 採用（已併入）
+• **2026-07-11** — v1.4.0.1 — 解壓到新資料夾 — 採用（已併入）
 
 ---
 
 ## 快速部署
 
-**本項目的正式部署方式為「目標伺服器拉取倉庫 → Docker Build → Docker Compose」。**
+**本項目的正式部署方式為「本地建置 tar.zst → 傳輸 → 遠端 docker load → docker compose」。**
 
 完整步驟請閱讀 **[DEPLOY.md](DEPLOY.md)**。以下僅為速覽。
 
-步驟 1：在目標伺服器取得源碼
+步驟 1：傳輸 tar.zst 到目標伺服器
 
-• `git clone https://github.com/fde-lander/filebrowser.git /opt/filebrowser-fde`
-• `cd /opt/filebrowser-fde`
+• `scp filebrowser-fde-v1.4.0.5-fde-hotfix.tar.zst user@伺服器:/tmp/`
 
-步驟 2：在目標伺服器建置映像
+步驟 2：載入映像
 
-• `docker build --build-arg="VERSION=v1.4.0.5-fde-hotfix" --build-arg="REVISION=$(git rev-parse --short HEAD)" -t filebrowser-fde:v1.4.0.5-fde-hotfix -f _docker/Dockerfile .`
+• `docker load -i /tmp/filebrowser-fde-v1.4.0.5-fde-hotfix.tar.zst`
 
 步驟 3：建立 `data/config.yaml`（必須，否則無法啟動）
 
@@ -81,10 +79,8 @@
 
 • `docker compose up -d`
 
-**注意：本倉庫不包含預先編譯的 tar 映像檔。** 所有 `*.tar` 已列入 `.gitignore`。若你偏好「先建置再傳映像」的做法，請參考 DEPLOY.md 的「資源需求與低記憶體伺服器注意事項」章節（做法二）。
-
 **最小配置（config.yaml）**：
-```yaml
+
 server:
   sources:
     - path: "/srv"
@@ -94,15 +90,12 @@ server:
 auth:
   adminUsername: admin
   adminPassword: admin
-```
 
 詳細配置請參考 [官方文檔](https://filebrowserquantum.com/en/docs/getting-started/config)。
 
 ---
 
 ## 舊版 Release 附件說明（歷史記錄）
-
-以下說明過去以 tar 檔分發時期的情況，供追溯用途。
 
 先前已發佈的 Release，其附件命名沿用了舊編號，實際情況如下：
 
@@ -113,10 +106,10 @@ auth:
 以上檔名與映像標籤均為舊編號殘留，與實際內容不符。經映像分層內容驗證確認：
 
 - 附件內容 = v1.4.0.5-fde-hotfix ＋ Bug I 移動端預覽佈局修正
-- 不含任何 v1.4.0.6 失效代碼（全域狀態列、壓縮控制路由、暫停逾時設定全部不存在）
+- 不含任何 v1.4.0.6 失效代碼
 - 附件 SHA256 與本地建置產物完全一致
 
-**新部署模式已不再需要 tar 檔。** 若你要使用此歷史附件，載入後建議重新打上正確標籤：
+若你要使用此歷史附件，載入後建議重新打上正確標籤：
 
 • `docker load -i filebrowser-fde-v1.4.0.6.tar`
 • `docker tag filebrowser-fde:v1.4.0.6 filebrowser-fde:v1.4.0.5-fde-hotfix`
@@ -127,6 +120,12 @@ auth:
 ## 已作廢版本（請勿使用）
 
 以下版本已作廢，不會再維護，亦不會出現在任何後續升級路徑中。
+
+**v1.5.6.1-fde — 已作廢**
+
+- 作廢日期：2026-09-30
+- 作廢原因：嘗試合併上游 v1.5.6-stable 升級。建置成功且通過所有編譯驗證，但部署實測後發現 Fork 核心功能全部丟失——右鍵選單無「壓縮圖片」、無「解壓到新資料夾」。升級方案未正確分析上游與 Fork patch 的整合關係，merge 衝突解決策略導致核心前端組件被上游版本覆蓋。
+- 處置方式：分支已刪除（本地 + 遠端），Docker 映像已移除，tar.zst 交付檔已刪除。代碼庫回復至 v1.4.0.5-fde-hotfix (main)。不修補、不重試，後續如需升級將由 v1.4.0.5-fde-hotfix 另起新方案。
 
 **v1.4.0.6 — 已作廢**
 
@@ -140,7 +139,7 @@ auth:
 - 作廢原因：原定為 v1.4.0.6 的後續修復版本。因 v1.4.0.6 整條路線放棄，未進入實施階段即終止。
 - 處置方式：不實施、不發佈，後續版本升級將直接跳過此版本。
 
-未來如需升級，將由 v1.4.0.5-fde-hotfix 之後另起新編號，不再沿用 v1.4.0.6／v1.4.0.7。
+未來如需升級，將由 v1.4.0.5-fde-hotfix 之後另起新編號，不再沿用 v1.4.0.6／v1.4.0.7／v1.5.6.1。
 
 ---
 
@@ -239,7 +238,7 @@ auth:
 - PNG 特殊路徑：低檔改用 WebP Q75
 - ZSTD 自動備份：tar.zst 格式，壓縮前先備份（backup-first 設計）
 - 3 級退避：同級目錄 -> 上一層 -> source 根目錄
-- 保底邏輯：壓縮後如 ≥ 原圖大小則跳過
+- 保底邏邏輯：壓縮後如 ≥ 原圖大小則跳過
 - Admin 權限門控：僅 Admin 使用者可見可操作
 - i18n：en / zh-cn / zh-tw 三語言
 
@@ -260,7 +259,7 @@ auth:
 - 後端：Go 1.25（http handlers + SQLite index + WebP/ZSTD）
 - 前端：Vue 3 / Vite（雙緩衝圖片檢視器 + 壓縮彈窗 + 輪詢）
 - Docker：3 階段建置（Go backend -> Node frontend -> Alpine final）
-- 部署：目標伺服器 git clone → docker build → docker compose（不推 Docker Hub，不分發 tar）
+- 部署：本地建置 tar.zst → 傳輸 → 遠端 docker load → docker compose
 
 ## 環境資訊
 

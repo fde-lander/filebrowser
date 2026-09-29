@@ -103,4 +103,47 @@
 - Status: READY FOR DEPLOYMENT
 
 ---
+## Session: 2026-09-29 — README Rewrite for v1.4.0.5-fde-hotfix
+
+### MASTER Directives
+1. Only v1.4.0.5-fde-hotfix works — MASTER uses only this version
+2. LATEST RELEASE already published; problem = README not updated yet
+3. v1.4.0.6 and everything after = VOIDED; future upgrades skip them entirely
+4. README must be fully Traditional Chinese
+5. Signature: FDE only, no other names
+6. Voided versions use recommended wording (not deleted silently)
+7. Release handling: OPTION A — do not touch published assets, document the situation
+8. README front section needs dedicated FDE FORK block + dated version history (descending date order)
+
+### Environment Correction
+- Previous PWF goal (v1.4.0.6) was stale. Goal updated to reflect v1.4.0.5-fde-hotfix baseline.
+- Project registry status was `completed` while work was actually unfinished — noted, not changed.
+
+### Release Verification (read-only, no modifications)
+- Release tag: v1.4.0.5-fde-stable, published 2026-07-15, points to commit 2c6b4490
+- Asset filename `filebrowser-fde-v1.4.0.6.tar` and inner image tag `filebrowser-fde:v1.4.0.6` are stale naming from the voided version
+- Decisive layer-content scan proved asset = v1.4.0.5-fde-hotfix + Bug I CSS:
+  - Bug I marker `flex-direction:column!important` present 2x (older builds: 0)
+  - Voided-version markers absent: no `compress-images/pause`, no `compressStatusBar`, no `compressPauseTimeout`
+  - SHA256 matches local build: b00e914105dc2c6bea95c7dc56be370d236f45cfad7cfaa218a97b2039908399
+  - Image built-in Version/CommitSHA are EMPTY (build did not pass -ldflags values)
+- Correction to earlier assumption: tag `v1.4.0.5-fde-stable` itself does NOT contain Bug I CSS (Bug I landed in HEAD only, added to the rebuilt image).
+
+### Deliverable
+- README.md rewritten (6976 -> 11520 bytes), full Traditional Chinese
+- Signature: FDE only
+- New structure: FDE FORK intro -> dated version history (descending) -> deploy steps -> release asset naming note -> voided versions -> feature list -> tech stack -> environment -> credits
+- Backup: README.md.bak-20260929-pre-tc-rewrite.bak (byte count verified identical to original)
+
+### Verification
+- Traditional-Chinese check via built-in conversion table (1493 chars): no simplified characters
+- Stale reference sweep: 0 hits for `filebrowser-fde-v1.4.0.4.tar`, `filebrowser-fde:v1.4.0.4`, `正在開發中`
+- Signature sweep: no AI / mascot names present
+- v1.4.0.5 SSE removal confirmed against source: progressManager functions deleted, subscribeProgress replaced by pollStatus
+
+### Open Item
+- README not yet committed to git (awaiting MASTER decision on commit/push)
+
+---
+
 *Update after completing each phase or encountering errors*

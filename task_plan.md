@@ -2,79 +2,108 @@
 
 ## Goal
 
-v1.4.0.6-fde: Mobile bug fixes (G/H/I) + Compress control features (pause/continue/cancel/skip) + Bug B re-investigation + Queue List API + cumulative progress + pause auto-timeout.
-All modules are independent commits with individual rollback capability.
+Maintain FileBrowser Quantum FDE fork. v1.4.0.5-fde-stable is the only usable release (README rewrite in progress). v1.4.0.6 and v1.4.0.7 are VOIDED - future upgrades will skip them entirely.
 
 ## Current Phase
 
-Phase 5: Implementation (IN PROGRESS - inline execution)
+Phase 5: README Rewrite for Stable Release
 
 ## Phases
 
-### Phase 1: Deep Code Research (COMPLETED)
-- Wave 1: 3 subagents dispatched + returned
-- Agent A: Prompts.vue -> CompressImages lifecycle (Bug B root cause)
-- Agent B: ExtendedImage.vue -> touch/click event bindings (Bug G/H root cause)
-- Agent C: compress.go + httpRouter.go + compress.js -> queueMgr + worker + routes (Ch8)
-- All findings verified by main agent via code reading
-- Status: completed
+<!-- CURRENT PHASES MARKER - Insert new phases BELOW (Do not modify) -->
 
-### Phase 2: Brainstorming + Design Discussion (COMPLETED)
-- 6 design topics discussed with MASTER, all confirmed:
-  1. Bug B: Method C (two-layer: global status bar + dialog detail)
-  2. Bug G: Conditional preventDefault (preserve swipe + transition)
-  3. Queue progress: Cumulative totalFiles/totalProcessed + batch info
-  4. Cancel scope: Cancel entire queue (not current batch)
-  5. Skip current batch: Added to v1.4.0.6 scope
-  6. Pause auto-timeout: Toggle + numeric input, default 30min, cross-session persisted
-- Skip/Cancel require confirmation dialog (showPrompt system)
-- Only 1 batch: hide skip button
-- Status: completed
+### Phase 5: README Rewrite for Stable Release
+- [x] 5.1 Verify release state and image content by layer scan
+- [x] 5.2 Draft Traditional Chinese README with FDE signature only
+- [x] 5.3 Add FDE Fork intro and dated version history section
+- [x] 5.4 Update deploy steps to latest stable release
+- [x] 5.5 Document release asset naming situation
+- [x] 5.6 Document voided versions with recommended wording
+- [x] 5.7 Self-review for stale version references
+- **Status:** in_progress
 
-### Phase 3: Design Spec Writing (IN PROGRESS)
-- 10 chapters, chapter-by-chapter PATCH
-- Status: in_progress
+### Phase 6: Deploy Doc and Latest Release
+- [ ] 6.1 Write complete Traditional Chinese DEPLOY.md for server-side build flow
+- [ ] 6.2 Add prominent deployment model notice section to README
+- [ ] 6.3 Verify build inputs and prerequisites are documented
+- [ ] 6.4 Commit README and DEPLOY docs to git
+- [ ] 6.5 Plan git tag and GitHub release operations for MASTER approval
+- **Status:** pending
 
-### Phase 5: Implementation (IN PROGRESS - inline execution)
-- Execution mode: INLINE (主 Agent 串行执行)
-- Skills loaded: executing-plans, TDD, PWF
-- Plan: ~/.hermes/docs/superpowers/plans/2026-07-15-v1.4.0.6-fde-plan.md
-- Each Task = 1 git commit, individually rollbackable
-- All patches < 2.5KB
-- Status: in_progress
+## Archived phase
 
-## Confirmed Design Decisions
+<!-- ARCHIVED PHASES MARKER - Move completed phases BELOW (Do not modify) -->
 
-1. Bug B: Method C two-layer (global status bar + dialog detail)
-2. Bug G: Remove .prevent from @touchmove, conditional preventDefault in touchMove/touchEnd
-3. Bug H: Ensure nav button calls transition path (nextPrevious.vue investigation needed)
-4. Bug I: @media (max-width: 768px) responsive CSS for preview overlay
-5. Queue List API: Leverage existing CompressJobStatus.Queue field
-6. Cumulative progress: totalFiles/totalProcessed/batchCount/currentBatchIndex
-7. Cancel = entire queue; Skip = current batch only (with batch > 1 check)
-8. Pause/Resume: sync.Cond on queueMgr
-9. Skip/Cancel: secondary confirmation via showPrompt system
-10. Pause auto-timeout: Toggle + numeric (5-120min, default 30), persisted 4-touchpoint
-11. Only 1 batch: hide skip button
+### Archived phase 1: Deep Code Research
+- [x] 1.1 Wave 1: 3 subagents dispatched + returned
+- [x] 1.2 Agent A: Prompts.vue -> CompressImages lifecycle (Bug B root cause)
+- [x] 1.3 Agent B: ExtendedImage.vue -> touch/click event bindings (Bug G/H root cause)
+- [x] 1.4 Agent C: compress.go + httpRouter.go + compress.js -> queueMgr + worker + routes (Ch8)
+- [x] 1.5 All findings verified by main agent via code reading
+- **Status:** complete
 
-## Commit Groups (9 independent commits)
+### Archived phase 2: Brainstorming + Design Discussion
+- [x] 2.1 6 design topics discussed with MASTER, all confirmed:
+- [x] 2.2 1. Bug B: Method C (two-layer: global status bar + dialog detail)
+- [x] 2.3 2. Bug G: Conditional preventDefault (preserve swipe + transition)
+- [x] 2.4 3. Queue progress: Cumulative totalFiles/totalProcessed + batch info
+- [x] 2.5 4. Cancel scope: Cancel entire queue (not current batch)
+- [x] 2.6 5. Skip current batch: Added to v1.4.0.6 scope
+- [x] 2.7 6. Pause auto-timeout: Toggle + numeric input, default 30min, cross-session persisted
+- [x] 2.8 Skip/Cancel require confirmation dialog (showPrompt system)
+- [x] 2.9 Only 1 batch: hide skip button
+- **Status:** complete
 
-1. Global status bar component (Bug B solution)
-2. compress.go: backend flags + sync.Cond + cumulative stats + timeout goroutine
-3. httpRouter.go: new route registration (pause/resume/cancel/skip/queue)
-4. compress.js: frontend API functions
-5. CompressImages.vue: control buttons + detail progress + confirm dialog
-6. CompressImages.vue: preview layout mobile CSS (Bug I)
-7. ExtendedImage.vue: Bug G fix (touchmove.prevent conditional)
-8. Bug H fix (nextPrevious.vue, pending investigation)
-9. Settings system + i18n (compressPauseTimeout)
+### Archived phase 3: Design Spec Writing
+- [x] 3.1 10 chapters, chapter-by-chapter PATCH
+- **Status:** complete
 
-## Key Constraints
+### Archived phase 4: Implementation
+- [x] 4.1 Execution mode: INLINE (主 Agent 串行执行)
+- [x] 4.2 Skills loaded: executing-plans, TDD, PWF
+- [x] 4.3 Plan: ~/.hermes/docs/superpowers/plans/2026-07-15-v1.4.0.6-fde-plan.md
+- [x] 4.4 Each Task = 1 git commit, individually rollbackable
+- [x] 4.5 All patches < 2.5KB
+- **Status:** complete
 
-- Transition engine LOCKED at v1.4.0.4-hotfix (do NOT modify)
-- DOUBT principle: subagent research -> verify -> design -> approve
-- Legacy CSS: annotate only, do NOT delete
-- Docker: tar only, never push to Hub
-- No local testing (Docker build -> save -> scp -> deploy)
-- i18n: 3 files must sync (en/zh-cn/zh-tw)
-- HARD-GATE: no sudo without MASTER approval
+## Key Questions
+
+1. Phase 4 gap: original v1.4.0.6 plan numbered phases 1/2/3/5 (Phase 4 was Round 1 Build & Deploy, superseded by Phase 5 Implementation which includes deployment logic). Not a data loss - verify against git history d7008dbf
+## Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Bug B: Method C two-layer (global status bar + dialog detail) | Design confirmed with MASTER during brainstorming |
+| Bug G: Remove .prevent from @touchmove, conditional preventDefault in touchMove/touchEnd | Preserve swipe + transition |
+| Bug H: Ensure nav button calls transition path (nextPrevious.vue investigation needed) | Design confirmed with MASTER |
+| Bug I: @media (max-width: 768px) responsive CSS for preview overlay | Design confirmed with MASTER |
+| Queue List API: Leverage existing CompressJobStatus.Queue field | Design confirmed with MASTER |
+| Cumulative progress: totalFiles/totalProcessed/batchCount/currentBatchIndex | Design confirmed with MASTER |
+| Cancel = entire queue; Skip = current batch only (with batch > 1 check) | Design confirmed with MASTER |
+| Pause/Resume: sync.Cond on queueMgr | Design confirmed with MASTER |
+| Skip/Cancel: secondary confirmation via showPrompt system | Design confirmed with MASTER |
+| Pause auto-timeout: Toggle + numeric (5-120min, default 30), persisted 4-touchpoint | Design confirmed with MASTER |
+| Only 1 batch: hide skip button | Design confirmed with MASTER |
+
+## Errors Encountered
+
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+
+## Notes
+- Commit Group 1: Global status bar component (Bug B solution)
+- Commit Group 2: compress.go backend flags + sync.Cond + cumulative stats + timeout goroutine
+- Commit Group 3: httpRouter.go new route registration (pause/resume/cancel/skip/queue)
+- Commit Group 4: compress.js frontend API functions
+- Commit Group 5: CompressImages.vue control buttons + detail progress + confirm dialog
+- Commit Group 6: CompressImages.vue preview layout mobile CSS (Bug I)
+- Commit Group 7: ExtendedImage.vue Bug G fix (touchmove.prevent conditional)
+- Commit Group 8: Bug H fix (nextPrevious.vue, pending investigation)
+- Commit Group 9: Settings system + i18n (compressPauseTimeout)
+- Key Constraint: Transition engine LOCKED at v1.4.0.4-hotfix (do NOT modify)
+- Key Constraint: DOUBT principle - subagent research -> verify -> design -> approve
+- Key Constraint: Legacy CSS - annotate only, do NOT delete
+- Key Constraint: Docker - tar only, never push to Hub
+- Key Constraint: No local testing (Docker build -> save -> scp -> deploy)
+- Key Constraint: i18n 3 files must sync (en/zh-cn/zh-tw)
+- Key Constraint: HARD-GATE - no sudo without MASTER approval
